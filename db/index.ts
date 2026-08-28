@@ -1,0 +1,133 @@
+import { env } from "cloudflare:workers";
+import { schemaStatements } from "./schema";
+import { articleSeeds, editorSeeds, opportunitySeeds } from "./seed";
+import type { AppState, Article, Editor, Interaction, ModelConnection, Opportunity } from "@/lib/types";
+
+type Statement = {
+  bind(...values: unknown[]): Statement;
+  run(): Promise<unknown>;
+  all<T>(): Promise<{ results: T[] }>;
+  first<T>(): Promise<T | null>;
+};
+
+type Database = {
+  prepare(query: string): Statement;
+  batch(statements: Statement[]): Promise<unknown>;
+};
+
+function getDatabase(): Database {
+  const database = (env as unknown as { DB?: Database }).DB;
+  if (!database) throw new Error("数据库绑定尚未配置");
+  return database;
+}
+
+export async function ensureDatabase() {
+  const db = getDatabase();
+  await db.batch(schemaStatements.map((sql) => db.prepare(sql)));
+  const count = await db.prepare("SELECT COUNT(*) AS total FROM editors").first<{ total: number }>();
+  if ((count?.total ?? 0) === 0) {
+    await db.batch(editorSeeds.map((row) => db.prepare(
+      "INSERT INTO editors (id,name,media,role,topics,x_url,stage,priority,last_article_date) VALUES (?,?,?,?,?,?,?,?,?)",
+    ).bind(...row)));
+    await db.batch(articleSeeds.map((row) => db.prepare(
+      "INSERT INTO articles (id,editor_id,title,url,published_at,summary,topics,source) VALUES (?,?,?,?,?,?,?,?)",
+    ).bind(...row)));
+    await db.batch(opportunitySeeds.map((row) => db.prepare(
+      "INSERT INTO opportunities (id,editor_id,article_id,priority,suggested_angle,due_date,x_post_status,status) VALUES (?,?,?,?,?,?,?,?)",
+    ).bind(...row)));
+    await db.prepare(
+      "INSERT INTO model_connections (id,label,provider,model,status,is_default) VALUES (?,?,?,?,?,?)",
+    ).bind("demo", "内置演示模式", "demo", "规则引擎", "可用", 1).run();
+  }
+  await db.prepare("PRAGMA optimize").run();
+}
+
+export async function getAppState(): Promise<AppState> {
+  await ensureDatabase();
+  const db = getDatabase();
+  const [editors, articles, opportunities, interactions, modelConnections] = await Promise.all([
+    db.prepare(`SELECT e.*,
+      COALESCE(SUM(CASE WHEN i.interaction_type IN ('公开回复','转发并补充') THEN 1 ELSE 0 END),0) AS effective_interactions,
+      COALESCE(SUM(CASE WHEN i.response_received = 1 THEN 1 ELSE 0 END),0) AS responses
+      FROM editors e LEFT JOIN interactions i ON i.editor_id=e.id
+      GROUP BY e.id ORDER BY CASE e.priority WHEN 'X优先' THEN 0 WHEN '重点' THEN 1 ELSE 2 END, e.name`).all<Editor>(),
+    db.prepare(`SELECT a.*, e.name AS editor_name, e.media
+      FROM articles a JOIN editors e ON e.id=a.editor_id
+      ORDER BY a.published_at DESC`).all<Article>(),
+    db.prepare(`SELECT o.*, e.name AS editor_name, e.media, e.x_url,
+      a.title AS article_title, a.url AS article_url
+      FROM opportunities o JOIN editors e ON e.id=o.editor_id
+      JOIN articles a ON a.id=o.article_id
+      ORDER BY o.due_date`).all<Opportunity>(),
+    db.prepare(`SELECT i.*, e.name AS editor_name, e.media
+      FROM interactions i JOIN editors e ON e.id=i.editor_id
+      ORDER BY i.occurred_at DESC`).all<Interaction>(),
+    db.prepare("SELECT * FROM model_connections ORDER BY is_default DESC, updated_at DESC").all<ModelConnection>(),
+  ]);
+  return {
+    editors: editors.results,
+    articles: articles.results,
+    opportunities: opportunities.results,
+    interactions: interactions.results,
+    modelConnections: modelConnections.results,
+  };
+}
+
+export async function updateOpportunity(id: string, status: string, xPostStatus: string, xPostUrl?: string) {
+  await ensureDatabase();
+  await getDatabase().prepare(
+    "UPDATE opportunities SET status=?, x_post_status=?, x_post_url=? WHERE id=?",
+  ).bind(status, xPostStatus, xPostUrl || null, id).run();
+}
+
+export async function updateEditorStage(id: string, stage: string) {
+  await ensureDatabase();
+  await getDatabase().prepare(
+    "UPDATE editors SET stage=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+  ).bind(stage, id).run();
+}
+
+export async function addInteraction(input: {
+  editorId: string;
+  date: string;
+  interactionType: string;
+  xPostUrl?: string;
+  replyUrl?: string;
+  summary: string;
+  responseReceived: boolean;
+  followedByEditor: boolean;
+}) {
+  await ensureDatabase();
+  const db = getDatabase();
+  await db.prepare(`INSERT INTO interactions
+    (id,editor_id,occurred_at,interaction_type,x_post_url,reply_url,summary,response_received,followed_by_editor)
+    VALUES (?,?,?,?,?,?,?,?,?)`).bind(
+      crypto.randomUUID(), input.editorId, input.date, input.interactionType,
+      input.xPostUrl || null, input.replyUrl || null, input.summary,
+      input.responseReceived ? 1 : 0, input.followedByEditor ? 1 : 0,
+    ).run();
+  const nextStage = input.responseReceived ? "对方回应" : input.interactionType === "点赞" ? null : "首次公开互动";
+  if (nextStage) {
+    await db.prepare(`UPDATE editors SET stage=CASE
+      WHEN stage='观察中' OR ?='对方回应' THEN ? ELSE stage END,
+      updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(nextStage, nextStage, input.editorId).run();
+  }
+}
+
+export async function saveModelConnection(input: {
+  label: string;
+  provider: string;
+  model: string;
+  baseUrl?: string;
+  keyHint?: string;
+  status: string;
+}) {
+  await ensureDatabase();
+  const db = getDatabase();
+  await db.prepare(`INSERT INTO model_connections
+    (id,label,provider,model,base_url,key_hint,status,is_default,updated_at)
+    VALUES (?,?,?,?,?,?,?,0,CURRENT_TIMESTAMP)`).bind(
+      crypto.randomUUID(), input.label, input.provider, input.model,
+      input.baseUrl || null, input.keyHint || null, input.status,
+    ).run();
+}

@@ -1,0 +1,66 @@
+export const schemaStatements = [
+  `CREATE TABLE IF NOT EXISTS editors (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    media TEXT NOT NULL,
+    role TEXT NOT NULL,
+    topics TEXT NOT NULL,
+    x_url TEXT,
+    stage TEXT NOT NULL DEFAULT '观察中',
+    priority TEXT NOT NULL DEFAULT '常规',
+    last_article_date TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS articles (
+    id TEXT PRIMARY KEY,
+    editor_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    url TEXT NOT NULL,
+    published_at TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    topics TEXT NOT NULL,
+    source TEXT NOT NULL,
+    FOREIGN KEY (editor_id) REFERENCES editors(id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS opportunities (
+    id TEXT PRIMARY KEY,
+    editor_id TEXT NOT NULL,
+    article_id TEXT NOT NULL,
+    priority TEXT NOT NULL,
+    suggested_angle TEXT NOT NULL,
+    due_date TEXT NOT NULL,
+    x_post_status TEXT NOT NULL DEFAULT '未检查',
+    status TEXT NOT NULL DEFAULT '待找原帖',
+    x_post_url TEXT,
+    FOREIGN KEY (editor_id) REFERENCES editors(id),
+    FOREIGN KEY (article_id) REFERENCES articles(id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS interactions (
+    id TEXT PRIMARY KEY,
+    editor_id TEXT NOT NULL,
+    occurred_at TEXT NOT NULL,
+    interaction_type TEXT NOT NULL,
+    x_post_url TEXT,
+    reply_url TEXT,
+    summary TEXT NOT NULL,
+    response_received INTEGER NOT NULL DEFAULT 0,
+    followed_by_editor INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (editor_id) REFERENCES editors(id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS model_connections (
+    id TEXT PRIMARY KEY,
+    label TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    base_url TEXT,
+    key_hint TEXT,
+    status TEXT NOT NULL DEFAULT '未测试',
+    is_default INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_editors_priority_stage ON editors(priority, stage)`,
+  `CREATE INDEX IF NOT EXISTS idx_articles_editor_published ON articles(editor_id, published_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_opportunities_status_due ON opportunities(status, due_date)`,
+  `CREATE INDEX IF NOT EXISTS idx_interactions_editor_date ON interactions(editor_id, occurred_at)`,
+] as const;

@@ -1,0 +1,76 @@
+export type Editor = {
+  id: string;
+  name: string;
+  media: string;
+  role: string;
+  topics: string;
+  x_url: string | null;
+  stage: string;
+  priority: string;
+  last_article_date: string | null;
+  effective_interactions: number;
+  responses: number;
+};
+
+export type Article = {
+  id: string;
+  editor_id: string;
+  editor_name: string;
+  media: string;
+  title: string;
+  url: string;
+  published_at: string;
+  summary: string;
+  topics: string;
+};
+
+export type Opportunity = {
+  id: string;
+  editor_id: string;
+  editor_name: string;
+  media: string;
+  x_url: string | null;
+  article_id: string;
+  article_title: string;
+  article_url: string;
+  priority: string;
+  suggested_angle: string;
+  due_date: string;
+  x_post_status: string;
+  status: string;
+  x_post_url: string | null;
+};
+
+export type Interaction = {
+  id: string;
+  editor_id: string;
+  editor_name: string;
+  media: string;
+  occurred_at: string;
+  interaction_type: string;
+  x_post_url: string | null;
+  reply_url: string | null;
+  summary: string;
+  response_received: number;
+  followed_by_editor: number;
+};
+
+export type ModelConnection = {
+  id: string;
+  label: string;
+  provider: string;
+  model: string;
+  base_url: string | null;
+  key_hint: string | null;
+  status: string;
+  is_default: number;
+  updated_at: string;
+};
+
+export type AppState = {
+  editors: Editor[];
+  articles: Article[];
+  opportunities: Opportunity[];
+  interactions: Interaction[];
+  modelConnections: ModelConnection[];
+};
