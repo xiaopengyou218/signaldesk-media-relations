@@ -39,6 +39,12 @@ export async function ensureDatabase() {
       "INSERT INTO model_connections (id,label,provider,model,status,is_default) VALUES (?,?,?,?,?,?)",
     ).bind("demo", "内置演示模式", "demo", "规则引擎", "可用", 1).run();
   }
+  await db.prepare(`INSERT OR IGNORE INTO model_connections
+    (id,label,provider,model,base_url,status,is_default)
+    VALUES (?,?,?,?,?,?,?)`).bind(
+      "minimax-local-preset", "MiniMax 本地分析", "minimax", "MiniMax-M2.7",
+      "https://api.minimaxi.com/v1", "本地预设", 0,
+    ).run();
   await db.prepare("PRAGMA optimize").run();
 }
 
