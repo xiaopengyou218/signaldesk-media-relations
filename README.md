@@ -16,6 +16,12 @@ SignalDesk 是一个轻量媒体关系工作台，用于集中管理科技媒体
 
 ## 本地运行
 
+macOS 日常使用：双击上一级目录中的 `启动 SignalDesk.command`。第一次启动会要求输入 MiniMax API Key，并保存到 macOS 钥匙串。可使用同目录中的停止和更新密钥入口。
+
+本地地址为 `http://127.0.0.1:3000`，本地数据库保存在项目的 Wrangler 状态目录中，不会与云端 D1 自动同步。
+
+开发模式：
+
 ```bash
 npm install
 npm run dev

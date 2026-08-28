@@ -296,10 +296,10 @@ function AnalysisRunModal({ connection, articles, busy, onClose, onRun }: {
       <p className="analysis-intro">本次会把所选文章的标题、摘要、标签及编辑资料发给 {connection.model}，生成关注点、相关性和一条 X 互动建议。</p>
       <div className="form-grid single">
         <label>选择文章<select value={articleId} onChange={(event) => setArticleId(event.target.value)}>{articles.map((article) => <option key={article.id} value={article.id}>{article.editor_name} · {article.title}</option>)}</select></label>
-        <label>API Key<input required type="password" autoComplete="off" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={`重新输入 ${connection.key_hint || "API Key"}`} /></label>
+        <label>API Key<input type="password" autoComplete="off" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={`本地钥匙串已配置可留空；否则输入 ${connection.key_hint || "API Key"}`} /></label>
       </div>
-      <p className="privacy-note">密钥只用于这一次请求，不写入数据库；分析结果会保存到对应文章下方。</p>
-      <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>取消</button><button disabled={busy || !articleId || !apiKey} className="primary-button">{busy ? "分析中…" : "开始真实分析"}</button></div>
+      <p className="privacy-note">本地版会从 macOS 钥匙串读取密钥；手动输入的密钥也只用于本次请求，不写入数据库。分析结果会保存到对应文章下方。</p>
+      <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>取消</button><button disabled={busy || !articleId} className="primary-button">{busy ? "分析中…" : "开始真实分析"}</button></div>
     </form>
   </dialog>;
 }

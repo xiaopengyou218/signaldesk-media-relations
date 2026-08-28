@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { env } from "cloudflare:workers";
 import { getAnalysisInput, getAppState, saveArticleAnalysis } from "@/db";
 import { analyzeArticleWithProvider } from "@/lib/llm/providers";
 
@@ -6,12 +7,14 @@ export async function POST(request: Request) {
   try {
     const input = await request.json() as { connectionId?: string; articleId?: string; apiKey?: string };
     if (!input.connectionId || !input.articleId) throw new Error("请选择模型连接和文章");
-    if (!input.apiKey) throw new Error("请临时输入 API Key");
+    const localApiKey = (env as unknown as { MINIMAX_API_KEY?: string }).MINIMAX_API_KEY?.trim();
+    const apiKey = input.apiKey?.trim() || localApiKey;
+    if (!apiKey) throw new Error("请临时输入 API Key；本地版也可以先将密钥保存到 macOS 钥匙串");
 
     const { connection, article } = await getAnalysisInput(input.connectionId, input.articleId);
     const analysis = await analyzeArticleWithProvider({
       provider: connection.provider as "minimax" | "compatible",
-      apiKey: input.apiKey,
+      apiKey,
       model: connection.model,
       baseUrl: connection.base_url || undefined,
       article,
