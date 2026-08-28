@@ -187,7 +187,8 @@ function ReviewView({ state, effective, responses }: { state: AppState; effectiv
 }
 
 function ModelsView({ state, onAdd }: { state: AppState; onAdd: () => void }) {
-  return <div className="models-grid"><section className="panel model-connections"><div className="panel-heading"><div><span className="eyebrow">模型连接</span><h2>供应商可以随时切换</h2></div><button className="primary-button" onClick={onAdd}>添加连接</button></div>{state.modelConnections.map((connection) => <div className="connection-row" key={connection.id}><span className={`provider-logo ${connection.provider}`}>{connection.provider === "demo" ? "D" : connection.provider[0].toUpperCase()}</span><div><strong>{connection.label}</strong><small>{connection.model}{connection.base_url ? ` · ${connection.base_url}` : ""}</small></div><span className="status-dot">{connection.status}</span>{connection.is_default ? <em>默认</em> : <em>备用</em>}</div>)}</section><section className="panel router-card"><span className="eyebrow">统一任务接口</span><h2>业务逻辑不绑定模型</h2><div className="router-flow"><span>文章分类</span><span>相关性评分</span><span>互动建议</span><span>周报生成</span></div><p>系统统一处理任务、结构化输出、重试与费用记录；每个供应商只负责把统一任务翻译成自己的 API 格式。</p></section><section className="panel provider-matrix"><div className="panel-heading"><div><span className="eyebrow">当前支持</span><h2>四类连接方式</h2></div></div>{[["OpenAI","原生 Responses API"],["Anthropic","原生 Messages API"],["Gemini","原生 GenerateContent API"],["兼容端点","OpenAI-compatible / 私有网关"]].map(([name, note]) => <div className="matrix-row" key={name}><strong>{name}</strong><span>{note}</span><em>可连接</em></div>)}</section></div>;
+  const providers = [["OpenAI", "原生 Responses API"], ["Anthropic", "原生 Messages API"], ["Gemini", "原生 GenerateContent API"], ["MiniMax", "中国区与国际区预设"], ["兼容端点", "其他 OpenAI-compatible / 私有网关"]];
+  return <div className="models-grid"><section className="panel model-connections"><div className="panel-heading"><div><span className="eyebrow">模型连接</span><h2>供应商可以随时切换</h2></div><button className="primary-button" onClick={onAdd}>添加连接</button></div>{state.modelConnections.map((connection) => <div className="connection-row" key={connection.id}><span className={`provider-logo ${connection.provider}`}>{connection.provider === "demo" ? "D" : connection.provider[0].toUpperCase()}</span><div><strong>{connection.label}</strong><small>{connection.model}{connection.base_url ? ` · ${connection.base_url}` : ""}</small></div><span className="status-dot">{connection.status}</span>{connection.is_default ? <em>默认</em> : <em>备用</em>}</div>)}</section><section className="panel router-card"><span className="eyebrow">统一任务接口</span><h2>业务逻辑不绑定模型</h2><div className="router-flow"><span>文章分类</span><span>相关性评分</span><span>互动建议</span><span>周报生成</span></div><p>系统统一处理任务、结构化输出、重试与费用记录；每个供应商只负责把统一任务翻译成自己的 API 格式。</p></section><section className="panel provider-matrix"><div className="panel-heading"><div><span className="eyebrow">当前支持</span><h2>五类连接方式</h2></div></div>{providers.map(([name, note]) => <div className="matrix-row" key={name}><strong>{name}</strong><span>{note}</span><em>可连接</em></div>)}</section></div>;
 }
 
 function OpportunityDrawer({ opportunity, busy, onClose, onUpdate, onLog }: { opportunity: Opportunity; busy: boolean; onClose: () => void; onUpdate: (status: string, xPostStatus: string, xPostUrl?: string) => void; onLog: () => void }) {
@@ -208,17 +209,48 @@ function ModelModal({ busy, onClose, onSave }: { busy: boolean; onClose: () => v
   const [form, setForm] = useState({ label: "", provider: "openai", model: "", baseUrl: "", apiKey: "" });
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState("");
+  const needsBaseUrl = form.provider === "minimax" || form.provider === "compatible";
+
+  function selectProvider(provider: string) {
+    if (provider === "minimax") {
+      setForm({ ...form, provider, model: "MiniMax-M2.7", baseUrl: "https://api.minimaxi.com/v1" });
+    } else {
+      setForm({ ...form, provider, model: "", baseUrl: provider === "compatible" ? form.baseUrl : "" });
+    }
+    setTestResult("");
+  }
+
   async function testConnection() {
     setTesting(true); setTestResult("");
     try {
       const response = await fetch("/api/model-test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
-      const result = await response.json() as { ok?: boolean; latencyMs?: number; error?: string };
+      const result = await response.json() as { ok?: boolean; latencyMs?: number; endpoint?: string; notice?: string; error?: string };
       if (!response.ok) throw new Error(result.error || "连接失败");
-      setTestResult(`连接成功 · ${result.latencyMs}ms`);
+      if (result.endpoint) {
+        setForm((current) => ({ ...current, baseUrl: result.endpoint?.replace(/\/chat\/completions$/, "") || current.baseUrl }));
+      }
+      setTestResult(`连接成功 · ${result.latencyMs}ms${result.notice ? ` · ${result.notice}` : ""}`);
     } catch (error) { setTestResult(error instanceof Error ? error.message : "连接失败"); }
     finally { setTesting(false); }
   }
   // The dialog backdrop is pointer-only; the labelled close button remains the keyboard path.
   // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
-  return <dialog open className="overlay center" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}><form className="modal" onSubmit={(event) => { event.preventDefault(); onSave({ ...form, keyHint: form.apiKey ? `••••${form.apiKey.slice(-4)}` : "", status: testResult.startsWith("连接成功") ? "已测试" : "未测试" }); }}><button type="button" className="close-button" onClick={onClose}>×</button><span className="eyebrow">BYOK · 用户自带密钥</span><h2>添加模型连接</h2><div className="form-grid"><label>连接名称<input required value={form.label} onChange={(event) => setForm({ ...form, label: event.target.value })} placeholder="例如：我的内容分析模型" /></label><label>供应商<select value={form.provider} onChange={(event) => setForm({ ...form, provider: event.target.value })}><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="gemini">Gemini</option><option value="compatible">OpenAI 兼容端点</option></select></label><label>模型名称<input required value={form.model} onChange={(event) => setForm({ ...form, model: event.target.value })} placeholder="使用供应商提供的模型 ID" /></label>{form.provider === "compatible" && <label>Base URL<input required value={form.baseUrl} onChange={(event) => setForm({ ...form, baseUrl: event.target.value })} placeholder="https://api.example.com/v1" /></label>}<label className="wide">API Key<input required type="password" autoComplete="off" value={form.apiKey} onChange={(event) => setForm({ ...form, apiKey: event.target.value })} placeholder="只用于本次连接测试" /></label></div><p className="privacy-note">MVP 不会保存完整 API Key，只保存供应商、模型、端点和密钥后四位。</p>{testResult && <div className={`test-result ${testResult.startsWith("连接成功") ? "ok" : ""}`}>{testResult}</div>}<div className="modal-actions"><button type="button" className="secondary-button" disabled={testing} onClick={testConnection}>{testing ? "测试中…" : "测试连接"}</button><button disabled={busy || !form.label || !form.model || !form.apiKey} className="primary-button">保存配置</button></div></form></dialog>;
+  return <dialog open className="overlay center" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <form className="modal" onSubmit={(event) => { event.preventDefault(); onSave({ ...form, keyHint: form.apiKey ? `••••${form.apiKey.slice(-4)}` : "", status: testResult.startsWith("连接成功") ? "已测试" : "未测试" }); }}>
+      <button type="button" className="close-button" onClick={onClose} aria-label="关闭">×</button>
+      <span className="eyebrow">BYOK · 用户自带密钥</span>
+      <h2>添加模型连接</h2>
+      <div className="form-grid">
+        <label>连接名称<input required value={form.label} onChange={(event) => setForm({ ...form, label: event.target.value })} placeholder="例如：我的内容分析模型" /></label>
+        <label>供应商<select value={form.provider} onChange={(event) => selectProvider(event.target.value)}><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="gemini">Gemini</option><option value="minimax">MiniMax</option><option value="compatible">其他 OpenAI 兼容端点</option></select></label>
+        <label>模型名称<input required value={form.model} onChange={(event) => setForm({ ...form, model: event.target.value })} placeholder={form.provider === "minimax" ? "例如 MiniMax-M2.7" : "使用供应商提供的模型 ID"} /></label>
+        {needsBaseUrl && <label>Base URL<input required value={form.baseUrl} onChange={(event) => setForm({ ...form, baseUrl: event.target.value })} placeholder={form.provider === "minimax" ? "https://api.minimaxi.com/v1" : "https://api.example.com/v1"} /></label>}
+        <label className="wide">API Key<input required type="password" autoComplete="off" value={form.apiKey} onChange={(event) => setForm({ ...form, apiKey: event.target.value })} placeholder="只用于本次连接测试" /></label>
+      </div>
+      {form.provider === "minimax" && <p className="endpoint-note">中国区使用 api.minimaxi.com/v1；国际区使用 api.minimax.io/v1。</p>}
+      <p className="privacy-note">MVP 不会保存完整 API Key，只保存供应商、模型、端点和密钥后四位。</p>
+      {testResult && <div className={`test-result ${testResult.startsWith("连接成功") ? "ok" : ""}`}>{testResult}</div>}
+      <div className="modal-actions"><button type="button" className="secondary-button" disabled={testing} onClick={testConnection}>{testing ? "测试中…" : "测试连接"}</button><button disabled={busy || !form.label || !form.model || !form.apiKey || (needsBaseUrl && !form.baseUrl)} className="primary-button">保存配置</button></div>
+    </form>
+  </dialog>;
 }
