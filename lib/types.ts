@@ -22,6 +22,17 @@ export type Article = {
   published_at: string;
   summary: string;
   topics: string;
+  source: string;
+};
+
+export type ArticleRefresh = {
+  completedAt: string;
+  status: string;
+  sourceCount: number;
+  discoveredCount: number;
+  insertedCount: number;
+  aiStatus: string;
+  errorSummary: string | null;
 };
 
 export type Opportunity = {
@@ -87,4 +98,5 @@ export type AppState = {
   interactions: Interaction[];
   modelConnections: ModelConnection[];
   analyses: ArticleAnalysis[];
+  articleRefresh: ArticleRefresh | null;
 };

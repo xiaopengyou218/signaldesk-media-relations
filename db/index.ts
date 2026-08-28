@@ -1,7 +1,8 @@
 import { env } from "cloudflare:workers";
 import { schemaStatements } from "./schema";
 import { articleSeeds, editorSeeds, opportunitySeeds } from "./seed";
-import type { AppState, Article, ArticleAnalysis, Editor, Interaction, ModelConnection, Opportunity } from "@/lib/types";
+import type { AppState, Article, ArticleAnalysis, ArticleRefresh, Editor, Interaction, ModelConnection, Opportunity } from "@/lib/types";
+import type { CollectedArticle } from "@/lib/collection/feeds";
 
 type Statement = {
   bind(...values: unknown[]): Statement;
@@ -51,7 +52,7 @@ export async function ensureDatabase() {
 export async function getAppState(): Promise<AppState> {
   await ensureDatabase();
   const db = getDatabase();
-  const [editors, articles, opportunities, interactions, modelConnections, analyses] = await Promise.all([
+  const [editors, articles, opportunities, interactions, modelConnections, analyses, refresh] = await Promise.all([
     db.prepare(`SELECT e.*,
       COALESCE(SUM(CASE WHEN i.interaction_type IN ('公开回复','转发并补充') THEN 1 ELSE 0 END),0) AS effective_interactions,
       COALESCE(SUM(CASE WHEN i.response_received = 1 THEN 1 ELSE 0 END),0) AS responses
@@ -72,6 +73,11 @@ export async function getAppState(): Promise<AppState> {
     db.prepare(`SELECT aa.*, mc.label AS connection_label, mc.model
       FROM article_analyses aa JOIN model_connections mc ON mc.id=aa.connection_id
       ORDER BY aa.created_at DESC`).all<ArticleAnalysis>(),
+    db.prepare(`SELECT completed_at AS completedAt, status,
+      source_count AS sourceCount, discovered_count AS discoveredCount,
+      inserted_count AS insertedCount, ai_status AS aiStatus,
+      error_summary AS errorSummary
+      FROM source_sync_runs ORDER BY completed_at DESC LIMIT 1`).first<ArticleRefresh>(),
   ]);
   return {
     editors: editors.results,
@@ -80,7 +86,62 @@ export async function getAppState(): Promise<AppState> {
     interactions: interactions.results,
     modelConnections: modelConnections.results,
     analyses: analyses.results,
+    articleRefresh: refresh,
   };
+}
+
+export async function getCollectionContext() {
+  await ensureDatabase();
+  const db = getDatabase();
+  const [editors, urls, connection, lastRefresh] = await Promise.all([
+    db.prepare("SELECT id,name,media FROM editors").all<{ id: string; name: string; media: string }>(),
+    db.prepare("SELECT url FROM articles").all<{ url: string }>(),
+    db.prepare(`SELECT * FROM model_connections WHERE provider='minimax'
+      ORDER BY CASE WHEN id='minimax-local-preset' THEN 0 ELSE 1 END, updated_at DESC LIMIT 1`).first<ModelConnection>(),
+    db.prepare(`SELECT ai_status AS aiStatus FROM source_sync_runs
+      ORDER BY completed_at DESC LIMIT 1`).first<{ aiStatus: string }>(),
+  ]);
+  return { editors: editors.results, knownUrls: new Set(urls.results.map((item) => item.url)), connection, lastAiStatus: lastRefresh?.aiStatus || "" };
+}
+
+export async function saveCollectedArticles(input: Array<CollectedArticle & { summary: string; topics: string }>) {
+  if (!input.length) return;
+  await ensureDatabase();
+  const db = getDatabase();
+  await db.batch(input.map((article) => db.prepare(`INSERT INTO articles
+    (id,editor_id,title,url,published_at,summary,topics,source)
+    VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(url) DO UPDATE SET
+      editor_id=excluded.editor_id, title=excluded.title, published_at=excluded.published_at,
+      summary=excluded.summary, topics=excluded.topics, source=excluded.source`).bind(
+      `AR-LIVE-${crypto.randomUUID()}`, article.editorId, article.title, article.url,
+      article.publishedAt, article.summary, article.topics, article.media,
+    )));
+  const latestByEditor = new Map<string, string>();
+  for (const article of input) {
+    const current = latestByEditor.get(article.editorId);
+    if (!current || article.publishedAt > current) latestByEditor.set(article.editorId, article.publishedAt);
+  }
+  await db.batch([...latestByEditor].map(([editorId, publishedAt]) => db.prepare(`UPDATE editors
+    SET last_article_date=CASE WHEN last_article_date IS NULL OR last_article_date < ? THEN ? ELSE last_article_date END,
+    updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(publishedAt, publishedAt, editorId)));
+}
+
+export async function saveSourceSyncRun(input: {
+  startedAt: string;
+  status: string;
+  sourceCount: number;
+  discoveredCount: number;
+  insertedCount: number;
+  aiStatus: string;
+  errorSummary?: string;
+}) {
+  await ensureDatabase();
+  await getDatabase().prepare(`INSERT INTO source_sync_runs
+    (id,started_at,completed_at,status,source_count,discovered_count,inserted_count,ai_status,error_summary)
+    VALUES (?,?,CURRENT_TIMESTAMP,?,?,?,?,?,?)`).bind(
+      crypto.randomUUID(), input.startedAt, input.status, input.sourceCount,
+      input.discoveredCount, input.insertedCount, input.aiStatus, input.errorSummary || null,
+    ).run();
 }
 
 export async function updateOpportunity(id: string, status: string, xPostStatus: string, xPostUrl?: string) {

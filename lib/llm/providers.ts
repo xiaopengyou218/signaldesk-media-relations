@@ -136,6 +136,23 @@ export type ArticleAnalysisOutput = {
   avoid: string;
 };
 
+export type CollectionEnrichmentInput = ProviderInput & {
+  articles: Array<{
+    url: string;
+    title: string;
+    excerpt: string;
+    categories: string[];
+    editorName: string;
+    media: string;
+  }>;
+};
+
+export type CollectionEnrichment = {
+  url: string;
+  summary: string;
+  topics: string;
+};
+
 function parseAnalysis(content: string): ArticleAnalysisOutput {
   const withoutThinking = content.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/```(?:json)?|```/gi, "").trim();
   const match = withoutThinking.match(/\{[\s\S]*\}/);
@@ -187,4 +204,58 @@ export async function analyzeArticleWithProvider(input: ArticleAnalysisInput): P
     if (error instanceof SyntaxError) throw new Error("模型返回的 JSON 格式不正确，请重试一次");
     throw error;
   }
+}
+
+export async function enrichCollectedArticlesWithProvider(input: CollectionEnrichmentInput): Promise<CollectionEnrichment[]> {
+  if (!input.articles.length) return [];
+  if (!input.apiKey.trim()) throw new Error("MiniMax API Key 未配置");
+  if (input.provider !== "minimax" && input.provider !== "compatible") {
+    throw new Error("文章采集增强目前支持 MiniMax 和 OpenAI 兼容端点");
+  }
+  const { endpoint } = compatibleEndpoint(input);
+  const records = input.articles.map((article, index) => ({
+    index,
+    url: article.url,
+    editor: article.editorName,
+    media: article.media,
+    title: article.title,
+    rssExcerpt: article.excerpt,
+    rssCategories: article.categories,
+  }));
+  const prompt = `你正在协助整理科技媒体公开 RSS 中刚发现的新文章。请只依据输入标题、RSS 摘要、分类和作者信息，不访问链接、不补充未提供的事实。
+
+为每篇文章生成：
+1. summary：一条简洁中文摘要，45-90个汉字；
+2. topics：2-4个中文主题，用中文分号“；”连接。
+
+输入：${JSON.stringify(records)}
+
+只返回 JSON，不要 Markdown，不要思考过程：
+{"items":[{"index":0,"summary":"…","topics":"…；…"}]}`;
+  const response = await checkedFetch(endpoint, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${input.apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: input.model,
+      messages: [
+        { role: "system", content: "你是严谨的科技媒体资料整理助手。不得编造文章内容。" },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.1,
+      max_tokens: 1200,
+    }),
+  }, "请确认 MiniMax 模型 ID 与 Base URL");
+  const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+  const content = payload.choices?.[0]?.message?.content
+    ?.replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/```(?:json)?|```/gi, "")
+    .trim();
+  const json = content?.match(/\{[\s\S]*\}/)?.[0];
+  if (!json) throw new Error("MiniMax 没有返回可读取的采集结果");
+  const parsed = JSON.parse(json) as { items?: Array<{ index?: number; summary?: string; topics?: string }> };
+  return (parsed.items || []).flatMap((item) => {
+    const article = typeof item.index === "number" ? input.articles[item.index] : undefined;
+    if (!article || !item.summary || !item.topics) return [];
+    return [{ url: article.url, summary: item.summary.trim(), topics: item.topics.trim() }];
+  });
 }

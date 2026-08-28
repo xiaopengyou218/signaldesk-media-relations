@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AppState, Editor, ModelConnection, Opportunity } from "@/lib/types";
 
 type Tab = "today" | "editors" | "articles" | "review" | "models";
@@ -24,6 +24,12 @@ function dateLabel(value: string) {
   return date.toLocaleDateString("zh-CN", { month: "short", day: "numeric" });
 }
 
+function dateTimeLabel(value: string) {
+  return new Date(value.endsWith("Z") || value.includes("+") ? value : `${value}Z`).toLocaleString("zh-CN", {
+    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+}
+
 export default function DashboardClient({ initialState }: { initialState: AppState }) {
   const [state, setState] = useState(initialState);
   const [tab, setTab] = useState<Tab>("today");
@@ -33,7 +39,9 @@ export default function DashboardClient({ initialState }: { initialState: AppSta
   const [analysisConnection, setAnalysisConnection] = useState<ModelConnection | null>(null);
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
+  const [refreshingArticles, setRefreshingArticles] = useState(false);
   const [notice, setNotice] = useState("");
+  const autoRefreshStarted = useRef(false);
 
   const xEditors = state.editors.filter((editor) => editor.priority === "X优先");
   const effectiveInteractions = state.interactions.filter((item) => ["公开回复", "转发并补充"].includes(item.interaction_type)).length;
@@ -59,6 +67,35 @@ export default function DashboardClient({ initialState }: { initialState: AppSta
     }
   }
 
+  async function refreshArticles(silent = false) {
+    setRefreshingArticles(true);
+    if (!silent) setNotice("");
+    try {
+      const response = await fetch("/api/refresh-articles", { method: "POST" });
+      const result = await response.json() as AppState & { error?: string };
+      if (!response.ok) throw new Error(result.error || "文章刷新失败");
+      setState(result);
+      const inserted = result.articleRefresh?.insertedCount || 0;
+      setNotice(inserted ? `文章已更新：新增 ${inserted} 篇` : "文章已是最新");
+      window.setTimeout(() => setNotice(""), 2600);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "文章刷新失败");
+    } finally {
+      setRefreshingArticles(false);
+    }
+  }
+
+  useEffect(() => {
+    if (autoRefreshStarted.current) return;
+    autoRefreshStarted.current = true;
+    const last = initialState.articleRefresh?.completedAt;
+    const stale = !last || Date.now() - new Date(last.endsWith("Z") || last.includes("+") ? last : `${last}Z`).getTime() > 6 * 60 * 60 * 1000;
+    const timer = stale ? window.setTimeout(() => void refreshArticles(true), 0) : undefined;
+    return () => { if (timer !== undefined) window.clearTimeout(timer); };
+    // The initial server snapshot is intentionally the trigger baseline.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const filteredEditors = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     return state.editors.filter((editor) => !keyword || [editor.name, editor.media, editor.role, editor.topics].join(" ").toLowerCase().includes(keyword));
@@ -83,14 +120,14 @@ export default function DashboardClient({ initialState }: { initialState: AppSta
 
       <section className="workspace">
         <Header tab={tab} />
-        {notice && <div className={`toast ${notice === "已保存" ? "success" : ""}`}>{notice}</div>}
+        {notice && <div className={`toast ${notice === "已保存" || notice.startsWith("文章已") ? "success" : ""}`}>{notice}</div>}
         {tab === "today" && (
           <TodayView state={state} xEditors={xEditors} effectiveInteractions={effectiveInteractions} responses={responses} completed={completed} onSelect={setSelectedOpportunity} />
         )}
         {tab === "editors" && (
           <EditorsView editors={filteredEditors} search={search} setSearch={setSearch} busy={busy} onStage={(id, stage) => mutate({ type: "update_editor_stage", id, stage })} onLog={setInteractionEditor} />
         )}
-        {tab === "articles" && <ArticlesView state={state} />}
+        {tab === "articles" && <ArticlesView state={state} refreshing={refreshingArticles} onRefresh={() => refreshArticles(false)} />}
         {tab === "review" && <ReviewView state={state} effective={effectiveInteractions} responses={responses} />}
         {tab === "models" && <ModelsView state={state} onAdd={() => setShowModelForm(true)} onRun={setAnalysisConnection} />}
       </section>
@@ -196,8 +233,11 @@ function EditorsView({ editors, search, setSearch, busy, onStage, onLog }: { edi
   return <section className="panel table-panel"><div className="toolbar"><div><span className="eyebrow">已导入数据库</span><h2>{editors.length} 位编辑</h2></div><input aria-label="搜索编辑" placeholder="搜索姓名、媒体或关注点" value={search} onChange={(event) => setSearch(event.target.value)} /></div><div className="editor-table"><div className="table-row table-head"><span>编辑</span><span>媒体与职位</span><span>关注领域</span><span>关系阶段</span><span>互动</span><span /></div>{editors.map((editor) => <div className="table-row" key={editor.id}><span className="editor-identity"><i>{initials(editor.name)}</i><span><strong>{editor.name}</strong>{editor.x_url ? <a href={editor.x_url} target="_blank" rel="noreferrer">@{editor.x_url.split("/").pop()}</a> : <small>暂无 X 账号</small>}</span></span><span><strong>{editor.media}</strong><small>{editor.role}</small></span><span className="topic-cell">{editor.topics}</span><span><select disabled={busy} value={editor.stage} onChange={(event) => onStage(editor.id, event.target.value)}>{stageOptions.map((stage) => <option key={stage}>{stage}</option>)}</select></span><span><strong>{editor.effective_interactions}</strong><small>{editor.responses} 次回应</small></span><span><button className="row-button" onClick={() => onLog(editor)}>记录互动</button></span></div>)}</div></section>;
 }
 
-function ArticlesView({ state }: { state: AppState }) {
-  return <div className="article-layout"><section className="panel article-feed"><div className="panel-heading"><div><span className="eyebrow">最近更新</span><h2>{state.articles.length} 篇重点文章</h2></div><span className="source-pill">RSS / 作者页</span></div>{state.articles.map((article) => {
+function ArticlesView({ state, refreshing, onRefresh }: { state: AppState; refreshing: boolean; onRefresh: () => void }) {
+  const refresh = state.articleRefresh;
+  const liveArticles = state.articles.filter((article) => article.id.startsWith("AR-LIVE-"));
+  const visibleArticles = liveArticles.length ? liveArticles : state.articles;
+  return <div className="article-layout"><section className="panel article-feed"><div className="panel-heading"><div><span className="eyebrow">最近更新</span><h2>{visibleArticles.length} 篇重点文章</h2>{refresh && <small className="refresh-meta">{dateTimeLabel(refresh.completedAt)} · {refresh.aiStatus}</small>}</div><div className="refresh-actions"><span className="source-pill">公开 RSS + MiniMax</span><button className="secondary-button" disabled={refreshing} onClick={onRefresh}>{refreshing ? "刷新中…" : "刷新文章"}</button></div></div>{visibleArticles.slice(0, 50).map((article) => {
     const analysis = state.analyses.find((item) => item.article_id === article.id);
     return <article className="article-item" key={article.id}><div className="article-date">{dateLabel(article.published_at)}</div><div><div className="person-line"><strong>{article.editor_name}</strong><span>{article.media}</span></div><a className="article-title" href={article.url} target="_blank" rel="noreferrer">{article.title}</a><p>{article.summary}</p><div className="tag-row">{article.topics.split("；").map((tag) => <span key={tag}>{tag}</span>)}</div>{analysis && <div className="analysis-card"><div><span>AI 实跑结果</span><em>{analysis.connection_label} · {analysis.model}</em></div><dl><dt>编辑关注点</dt><dd>{analysis.focus}</dd><dt>相关性判断</dt><dd>{analysis.relevance}</dd><dt>X 互动建议</dt><dd>{analysis.x_angle}</dd><dt>避免</dt><dd>{analysis.avoid}</dd></dl></div>}</div></article>;
   })}</section><aside className="panel method-card"><span className="eyebrow">低成本流程</span><h2>只把必要内容交给模型</h2><ol><li><strong>采集</strong><span>RSS 和作者页</span></li><li><strong>去重</strong><span>URL 与正文指纹</span></li><li><strong>初筛</strong><span>关键词和规则</span></li><li><strong>分析</strong><span>仅处理高相关内容</span></li></ol></aside></div>;
