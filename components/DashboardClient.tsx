@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { AppState, Editor, Opportunity } from "@/lib/types";
+import type { AppState, Editor, ModelConnection, Opportunity } from "@/lib/types";
 
 type Tab = "today" | "editors" | "articles" | "review" | "models";
 
@@ -30,6 +30,7 @@ export default function DashboardClient({ initialState }: { initialState: AppSta
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [interactionEditor, setInteractionEditor] = useState<Editor | null>(null);
   const [showModelForm, setShowModelForm] = useState(false);
+  const [analysisConnection, setAnalysisConnection] = useState<ModelConnection | null>(null);
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -91,7 +92,7 @@ export default function DashboardClient({ initialState }: { initialState: AppSta
         )}
         {tab === "articles" && <ArticlesView state={state} />}
         {tab === "review" && <ReviewView state={state} effective={effectiveInteractions} responses={responses} />}
-        {tab === "models" && <ModelsView state={state} onAdd={() => setShowModelForm(true)} />}
+        {tab === "models" && <ModelsView state={state} onAdd={() => setShowModelForm(true)} onRun={setAnalysisConnection} />}
       </section>
 
       {selectedOpportunity && (
@@ -120,6 +121,24 @@ export default function DashboardClient({ initialState }: { initialState: AppSta
         <ModelModal busy={busy} onClose={() => setShowModelForm(false)} onSave={async (payload) => {
           const ok = await mutate({ type: "save_model_connection", ...payload });
           if (ok) setShowModelForm(false);
+        }} />
+      )}
+      {analysisConnection && (
+        <AnalysisRunModal connection={analysisConnection} articles={state.articles} busy={busy} onClose={() => setAnalysisConnection(null)} onRun={async (articleId, apiKey) => {
+          setBusy(true); setNotice("");
+          try {
+            const response = await fetch("/api/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ connectionId: analysisConnection.id, articleId, apiKey }) });
+            const result = await response.json() as AppState & { error?: string };
+            if (!response.ok) throw new Error(result.error || "分析失败");
+            setState(result);
+            setAnalysisConnection(null);
+            setTab("articles");
+            setNotice("真实文章分析已完成");
+          } catch (error) {
+            setNotice(error instanceof Error ? error.message : "分析失败");
+          } finally {
+            setBusy(false);
+          }
         }} />
       )}
     </main>
@@ -178,7 +197,10 @@ function EditorsView({ editors, search, setSearch, busy, onStage, onLog }: { edi
 }
 
 function ArticlesView({ state }: { state: AppState }) {
-  return <div className="article-layout"><section className="panel article-feed"><div className="panel-heading"><div><span className="eyebrow">最近更新</span><h2>{state.articles.length} 篇重点文章</h2></div><span className="source-pill">RSS / 作者页</span></div>{state.articles.map((article) => <article className="article-item" key={article.id}><div className="article-date">{dateLabel(article.published_at)}</div><div><div className="person-line"><strong>{article.editor_name}</strong><span>{article.media}</span></div><a className="article-title" href={article.url} target="_blank" rel="noreferrer">{article.title}</a><p>{article.summary}</p><div className="tag-row">{article.topics.split("；").map((tag) => <span key={tag}>{tag}</span>)}</div></div></article>)}</section><aside className="panel method-card"><span className="eyebrow">低成本流程</span><h2>只把必要内容交给模型</h2><ol><li><strong>采集</strong><span>RSS 和作者页</span></li><li><strong>去重</strong><span>URL 与正文指纹</span></li><li><strong>初筛</strong><span>关键词和规则</span></li><li><strong>分析</strong><span>仅处理高相关内容</span></li></ol></aside></div>;
+  return <div className="article-layout"><section className="panel article-feed"><div className="panel-heading"><div><span className="eyebrow">最近更新</span><h2>{state.articles.length} 篇重点文章</h2></div><span className="source-pill">RSS / 作者页</span></div>{state.articles.map((article) => {
+    const analysis = state.analyses.find((item) => item.article_id === article.id);
+    return <article className="article-item" key={article.id}><div className="article-date">{dateLabel(article.published_at)}</div><div><div className="person-line"><strong>{article.editor_name}</strong><span>{article.media}</span></div><a className="article-title" href={article.url} target="_blank" rel="noreferrer">{article.title}</a><p>{article.summary}</p><div className="tag-row">{article.topics.split("；").map((tag) => <span key={tag}>{tag}</span>)}</div>{analysis && <div className="analysis-card"><div><span>AI 实跑结果</span><em>{analysis.connection_label} · {analysis.model}</em></div><dl><dt>编辑关注点</dt><dd>{analysis.focus}</dd><dt>相关性判断</dt><dd>{analysis.relevance}</dd><dt>X 互动建议</dt><dd>{analysis.x_angle}</dd><dt>避免</dt><dd>{analysis.avoid}</dd></dl></div>}</div></article>;
+  })}</section><aside className="panel method-card"><span className="eyebrow">低成本流程</span><h2>只把必要内容交给模型</h2><ol><li><strong>采集</strong><span>RSS 和作者页</span></li><li><strong>去重</strong><span>URL 与正文指纹</span></li><li><strong>初筛</strong><span>关键词和规则</span></li><li><strong>分析</strong><span>仅处理高相关内容</span></li></ol></aside></div>;
 }
 
 function ReviewView({ state, effective, responses }: { state: AppState; effective: number; responses: number }) {
@@ -186,9 +208,9 @@ function ReviewView({ state, effective, responses }: { state: AppState; effectiv
   return <div className="review-grid"><section className="panel review-hero"><span className="eyebrow">第一周 · 8月26日至9月1日</span><h2>互动质量比数量重要</h2><div className="review-meter"><span style={{ width: `${progress}%` }} /></div><div className="review-stats"><div><strong>{effective}</strong><span>有效公开互动</span></div><div><strong>{responses}</strong><span>编辑回应</span></div><div><strong>{state.editors.filter((item) => item.stage !== "观察中").length}</strong><span>关系升级</span></div></div></section><section className="panel weekly-table"><div className="panel-heading"><div><span className="eyebrow">四周试运行</span><h2>成功标准</h2></div></div>{["建议机会被采纳","回复草稿可直接使用","获得编辑真实回应","连续四周仍愿意使用"].map((item, index) => <div className="goal-row" key={item}><span>0{index + 1}</span><strong>{item}</strong><em>{index === 0 ? `${Math.round(progress)}%` : "待观察"}</em></div>)}</section><section className="panel boundary-card"><span className="eyebrow">精力边界</span><h2>系统应该帮你减少动作</h2><ul><li>每天只检查一次，最多10分钟</li><li>每周最多3–5次有效互动</li><li>找不到原帖就跳过</li><li>点赞不推动关系阶段</li><li>不自动发布、不批量触达</li></ul></section></div>;
 }
 
-function ModelsView({ state, onAdd }: { state: AppState; onAdd: () => void }) {
+function ModelsView({ state, onAdd, onRun }: { state: AppState; onAdd: () => void; onRun: (connection: ModelConnection) => void }) {
   const providers = [["OpenAI", "原生 Responses API"], ["Anthropic", "原生 Messages API"], ["Gemini", "原生 GenerateContent API"], ["MiniMax", "中国区与国际区预设"], ["兼容端点", "其他 OpenAI-compatible / 私有网关"]];
-  return <div className="models-grid"><section className="panel model-connections"><div className="panel-heading"><div><span className="eyebrow">模型连接</span><h2>供应商可以随时切换</h2></div><button className="primary-button" onClick={onAdd}>添加连接</button></div>{state.modelConnections.map((connection) => <div className="connection-row" key={connection.id}><span className={`provider-logo ${connection.provider}`}>{connection.provider === "demo" ? "D" : connection.provider[0].toUpperCase()}</span><div><strong>{connection.label}</strong><small>{connection.model}{connection.base_url ? ` · ${connection.base_url}` : ""}</small></div><span className="status-dot">{connection.status}</span>{connection.is_default ? <em>默认</em> : <em>备用</em>}</div>)}</section><section className="panel router-card"><span className="eyebrow">统一任务接口</span><h2>业务逻辑不绑定模型</h2><div className="router-flow"><span>文章分类</span><span>相关性评分</span><span>互动建议</span><span>周报生成</span></div><p>系统统一处理任务、结构化输出、重试与费用记录；每个供应商只负责把统一任务翻译成自己的 API 格式。</p></section><section className="panel provider-matrix"><div className="panel-heading"><div><span className="eyebrow">当前支持</span><h2>五类连接方式</h2></div></div>{providers.map(([name, note]) => <div className="matrix-row" key={name}><strong>{name}</strong><span>{note}</span><em>可连接</em></div>)}</section></div>;
+  return <div className="models-grid"><section className="panel model-connections"><div className="panel-heading"><div><span className="eyebrow">模型连接</span><h2>供应商可以随时切换</h2></div><button className="primary-button" onClick={onAdd}>添加连接</button></div>{state.modelConnections.map((connection) => <div className="connection-row" key={connection.id}><span className={`provider-logo ${connection.provider}`}>{connection.provider === "demo" ? "D" : connection.provider[0].toUpperCase()}</span><div><strong>{connection.label}</strong><small>{connection.model}{connection.base_url ? ` · ${connection.base_url}` : ""}</small></div><span className="status-dot">{connection.status}</span>{connection.provider === "minimax" || connection.provider === "compatible" ? <button className="run-button" onClick={() => onRun(connection)}>试跑真实文章</button> : connection.is_default ? <em>默认</em> : <em>备用</em>}</div>)}</section><section className="panel router-card"><span className="eyebrow">统一任务接口</span><h2>业务逻辑不绑定模型</h2><div className="router-flow"><span>文章分类</span><span>相关性评分</span><span>互动建议</span><span>周报生成</span></div><p>系统统一处理任务、结构化输出、重试与费用记录；每个供应商只负责把统一任务翻译成自己的 API 格式。</p></section><section className="panel provider-matrix"><div className="panel-heading"><div><span className="eyebrow">当前支持</span><h2>五类连接方式</h2></div></div>{providers.map(([name, note]) => <div className="matrix-row" key={name}><strong>{name}</strong><span>{note}</span><em>可连接</em></div>)}</section></div>;
 }
 
 function OpportunityDrawer({ opportunity, busy, onClose, onUpdate, onLog }: { opportunity: Opportunity; busy: boolean; onClose: () => void; onUpdate: (status: string, xPostStatus: string, xPostUrl?: string) => void; onLog: () => void }) {
@@ -251,6 +273,33 @@ function ModelModal({ busy, onClose, onSave }: { busy: boolean; onClose: () => v
       <p className="privacy-note">MVP 不会保存完整 API Key，只保存供应商、模型、端点和密钥后四位。</p>
       {testResult && <div className={`test-result ${testResult.startsWith("连接成功") ? "ok" : ""}`}>{testResult}</div>}
       <div className="modal-actions"><button type="button" className="secondary-button" disabled={testing} onClick={testConnection}>{testing ? "测试中…" : "测试连接"}</button><button disabled={busy || !form.label || !form.model || !form.apiKey || (needsBaseUrl && !form.baseUrl)} className="primary-button">保存配置</button></div>
+    </form>
+  </dialog>;
+}
+
+function AnalysisRunModal({ connection, articles, busy, onClose, onRun }: {
+  connection: ModelConnection;
+  articles: AppState["articles"];
+  busy: boolean;
+  onClose: () => void;
+  onRun: (articleId: string, apiKey: string) => void;
+}) {
+  const [articleId, setArticleId] = useState(articles[0]?.id || "");
+  const [apiKey, setApiKey] = useState("");
+  // The dialog backdrop is pointer-only; the labelled close button remains the keyboard path.
+  // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
+  return <dialog open className="overlay center" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <form className="modal analysis-modal" onSubmit={(event) => { event.preventDefault(); onRun(articleId, apiKey); }}>
+      <button type="button" className="close-button" onClick={onClose} aria-label="关闭">×</button>
+      <span className="eyebrow">真实 API · 单篇试跑</span>
+      <h2>用 {connection.label} 分析文章</h2>
+      <p className="analysis-intro">本次会把所选文章的标题、摘要、标签及编辑资料发给 {connection.model}，生成关注点、相关性和一条 X 互动建议。</p>
+      <div className="form-grid single">
+        <label>选择文章<select value={articleId} onChange={(event) => setArticleId(event.target.value)}>{articles.map((article) => <option key={article.id} value={article.id}>{article.editor_name} · {article.title}</option>)}</select></label>
+        <label>API Key<input required type="password" autoComplete="off" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={`重新输入 ${connection.key_hint || "API Key"}`} /></label>
+      </div>
+      <p className="privacy-note">密钥只用于这一次请求，不写入数据库；分析结果会保存到对应文章下方。</p>
+      <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>取消</button><button disabled={busy || !articleId || !apiKey} className="primary-button">{busy ? "分析中…" : "开始真实分析"}</button></div>
     </form>
   </dialog>;
 }

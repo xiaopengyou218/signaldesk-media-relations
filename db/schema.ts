@@ -59,8 +59,21 @@ export const schemaStatements = [
     is_default INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS article_analyses (
+    id TEXT PRIMARY KEY,
+    article_id TEXT NOT NULL,
+    connection_id TEXT NOT NULL,
+    focus TEXT NOT NULL,
+    relevance TEXT NOT NULL,
+    x_angle TEXT NOT NULL,
+    avoid TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (article_id) REFERENCES articles(id),
+    FOREIGN KEY (connection_id) REFERENCES model_connections(id)
+  )`,
   `CREATE INDEX IF NOT EXISTS idx_editors_priority_stage ON editors(priority, stage)`,
   `CREATE INDEX IF NOT EXISTS idx_articles_editor_published ON articles(editor_id, published_at)`,
   `CREATE INDEX IF NOT EXISTS idx_opportunities_status_due ON opportunities(status, due_date)`,
   `CREATE INDEX IF NOT EXISTS idx_interactions_editor_date ON interactions(editor_id, occurred_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_article_analyses_article_created ON article_analyses(article_id, created_at)`,
 ] as const;

@@ -67,10 +67,24 @@ export type ModelConnection = {
   updated_at: string;
 };
 
+export type ArticleAnalysis = {
+  id: string;
+  article_id: string;
+  connection_id: string;
+  connection_label: string;
+  model: string;
+  focus: string;
+  relevance: string;
+  x_angle: string;
+  avoid: string;
+  created_at: string;
+};
+
 export type AppState = {
   editors: Editor[];
   articles: Article[];
   opportunities: Opportunity[];
   interactions: Interaction[];
   modelConnections: ModelConnection[];
+  analyses: ArticleAnalysis[];
 };

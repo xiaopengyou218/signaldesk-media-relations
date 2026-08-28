@@ -116,3 +116,75 @@ export async function testProvider(input: ProviderInput) {
   }
   return { ok: true, latencyMs: Date.now() - started, endpoint, notice };
 }
+
+export type ArticleAnalysisInput = ProviderInput & {
+  article: {
+    title: string;
+    summary: string;
+    topics: string;
+    editor_name: string;
+    media: string;
+    editor_role: string;
+    editor_topics: string;
+  };
+};
+
+export type ArticleAnalysisOutput = {
+  focus: string;
+  relevance: string;
+  xAngle: string;
+  avoid: string;
+};
+
+function parseAnalysis(content: string): ArticleAnalysisOutput {
+  const withoutThinking = content.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/```(?:json)?|```/gi, "").trim();
+  const match = withoutThinking.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error("模型已响应，但没有返回可读取的结构化分析");
+  const parsed = JSON.parse(match[0]) as Partial<ArticleAnalysisOutput>;
+  if (!parsed.focus || !parsed.relevance || !parsed.xAngle || !parsed.avoid) {
+    throw new Error("模型返回内容缺少必要字段，请重试一次");
+  }
+  return { focus: parsed.focus, relevance: parsed.relevance, xAngle: parsed.xAngle, avoid: parsed.avoid };
+}
+
+export async function analyzeArticleWithProvider(input: ArticleAnalysisInput): Promise<ArticleAnalysisOutput> {
+  if (!input.apiKey.trim()) throw new Error("请临时输入 API Key");
+  if (input.provider !== "minimax" && input.provider !== "compatible") {
+    throw new Error("本次真实试跑先支持 MiniMax 和 OpenAI 兼容端点");
+  }
+  const { endpoint } = compatibleEndpoint(input);
+  const prompt = `请分析下面这篇真实文章记录，目标是帮助用户理解科技媒体编辑的长期关注点，并决定是否值得在 X 上进行一次低打扰、增加信息量的公开互动。
+
+编辑：${input.article.editor_name}
+媒体：${input.article.media}
+职位：${input.article.editor_role}
+编辑历史关注领域：${input.article.editor_topics}
+文章标题：${input.article.title}
+文章摘要：${input.article.summary}
+文章标签：${input.article.topics}
+
+只返回一个 JSON 对象，不要 Markdown，不要额外说明：
+{"focus":"用1-2句概括这篇文章反映出的编辑关注点","relevance":"用1-2句说明为何值得或不值得互动","xAngle":"一条自然、具体、不奉承的中文 X 回复建议；不超过120个汉字","avoid":"一句话说明互动时应避免什么"}`;
+  const response = await checkedFetch(endpoint, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${input.apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: input.model,
+      messages: [
+        { role: "system", content: "你是严谨的科技媒体关系研究助手。基于提供的数据判断，不编造作者观点或事实。" },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.2,
+      max_tokens: 700,
+    }),
+  }, "请确认模型 ID 与 Base URL；MiniMax 中国区应使用 https://api.minimaxi.com/v1");
+  const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+  const content = payload.choices?.[0]?.message?.content;
+  if (!content) throw new Error("模型没有返回分析内容");
+  try {
+    return parseAnalysis(content);
+  } catch (error) {
+    if (error instanceof SyntaxError) throw new Error("模型返回的 JSON 格式不正确，请重试一次");
+    throw error;
+  }
+}

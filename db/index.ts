@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { schemaStatements } from "./schema";
 import { articleSeeds, editorSeeds, opportunitySeeds } from "./seed";
-import type { AppState, Article, Editor, Interaction, ModelConnection, Opportunity } from "@/lib/types";
+import type { AppState, Article, ArticleAnalysis, Editor, Interaction, ModelConnection, Opportunity } from "@/lib/types";
 
 type Statement = {
   bind(...values: unknown[]): Statement;
@@ -45,7 +45,7 @@ export async function ensureDatabase() {
 export async function getAppState(): Promise<AppState> {
   await ensureDatabase();
   const db = getDatabase();
-  const [editors, articles, opportunities, interactions, modelConnections] = await Promise.all([
+  const [editors, articles, opportunities, interactions, modelConnections, analyses] = await Promise.all([
     db.prepare(`SELECT e.*,
       COALESCE(SUM(CASE WHEN i.interaction_type IN ('公开回复','转发并补充') THEN 1 ELSE 0 END),0) AS effective_interactions,
       COALESCE(SUM(CASE WHEN i.response_received = 1 THEN 1 ELSE 0 END),0) AS responses
@@ -63,6 +63,9 @@ export async function getAppState(): Promise<AppState> {
       FROM interactions i JOIN editors e ON e.id=i.editor_id
       ORDER BY i.occurred_at DESC`).all<Interaction>(),
     db.prepare("SELECT * FROM model_connections ORDER BY is_default DESC, updated_at DESC").all<ModelConnection>(),
+    db.prepare(`SELECT aa.*, mc.label AS connection_label, mc.model
+      FROM article_analyses aa JOIN model_connections mc ON mc.id=aa.connection_id
+      ORDER BY aa.created_at DESC`).all<ArticleAnalysis>(),
   ]);
   return {
     editors: editors.results,
@@ -70,6 +73,7 @@ export async function getAppState(): Promise<AppState> {
     opportunities: opportunities.results,
     interactions: interactions.results,
     modelConnections: modelConnections.results,
+    analyses: analyses.results,
   };
 }
 
@@ -129,5 +133,34 @@ export async function saveModelConnection(input: {
     VALUES (?,?,?,?,?,?,?,0,CURRENT_TIMESTAMP)`).bind(
       crypto.randomUUID(), input.label, input.provider, input.model,
       input.baseUrl || null, input.keyHint || null, input.status,
+    ).run();
+}
+
+export async function getAnalysisInput(connectionId: string, articleId: string) {
+  await ensureDatabase();
+  const db = getDatabase();
+  const connection = await db.prepare("SELECT * FROM model_connections WHERE id=?").bind(connectionId).first<ModelConnection>();
+  const article = await db.prepare(`SELECT a.*, e.name AS editor_name, e.media, e.role AS editor_role, e.topics AS editor_topics
+    FROM articles a JOIN editors e ON e.id=a.editor_id WHERE a.id=?`).bind(articleId).first<Article & { editor_role: string; editor_topics: string }>();
+  if (!connection) throw new Error("找不到模型连接");
+  if (!article) throw new Error("找不到文章");
+  if (connection.provider === "demo") throw new Error("演示模式不能执行真实模型分析");
+  return { connection, article };
+}
+
+export async function saveArticleAnalysis(input: {
+  articleId: string;
+  connectionId: string;
+  focus: string;
+  relevance: string;
+  xAngle: string;
+  avoid: string;
+}) {
+  await ensureDatabase();
+  await getDatabase().prepare(`INSERT INTO article_analyses
+    (id,article_id,connection_id,focus,relevance,x_angle,avoid)
+    VALUES (?,?,?,?,?,?,?)`).bind(
+      crypto.randomUUID(), input.articleId, input.connectionId, input.focus,
+      input.relevance, input.xAngle, input.avoid,
     ).run();
 }
