@@ -9,6 +9,10 @@ export const schemaStatements = [
     stage TEXT NOT NULL DEFAULT '观察中',
     priority TEXT NOT NULL DEFAULT '常规',
     last_article_date TEXT,
+    x_activity_status TEXT NOT NULL DEFAULT '待核验',
+    x_last_observed_at TEXT,
+    x_activity_note TEXT,
+    x_verified_at TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,

@@ -19,6 +19,43 @@ export const editorSeeds = [
   ["ED-0018","Kerry Wan","ZDNET","Editor-in-Chief","消费电子；智能手机；笔记本电脑；产品测试；购买决策",null,"观察中","重点","2026-08-19"],
 ] as const;
 
+export const editorExpansionSeeds = [
+  ["ED-0019","Tom Warren","The Verge","Senior Correspondent","Microsoft；Windows；Xbox；PC游戏；人工智能","https://x.com/tomwarren","观察中","X优先","2026-08-26","活跃","2026-08-29","近7日持续发布和回复，专业内容集中于 Microsoft、Xbox 与 AI","2026-09-01"],
+  ["ED-0020","Karissa Bell","Engadget","Senior Reporter","社交媒体；平台政策；Meta；X；互联网文化","https://x.com/karissabe","观察中","X优先","2026-08-28","活跃","2026-08-28","近期持续分享社交平台、科技政策与互联网文化报道","2026-09-01"],
+  ["ED-0021","Lorenzo Franceschi-Bicchierai","TechCrunch","Senior Reporter, Cybersecurity","网络安全；隐私；监控；AI安全；黑客","https://x.com/lorenzofb","观察中","X优先","2026-09-01","活跃","2026-09-01","当日仍在发布网络安全与 AI 安全相关报道","2026-09-01"],
+  ["ED-0022","Ivan Mehta","TechCrunch","Consumer Tech Reporter","消费科技；应用；人工智能；智能手机；全球科技市场","https://x.com/IndianIdle","观察中","X优先","2026-09-01","活跃","2026-09-01","当日仍在分享消费科技与应用相关新闻","2026-09-01"],
+  ["ED-0023","Amanda Silberling","TechCrunch","Senior Writer","科技文化；社交平台；创作者经济；人工智能；消费硬件","https://x.com/asilbwrites","观察中","X优先","2026-08-29","活跃","2026-08-29","近期持续发布科技文化、社交平台与创作者议题","2026-09-01"],
+  ["ED-0024","Chance Miller","9to5Mac","Editor-in-Chief","Apple；iPhone；Mac；服务；公司战略","https://x.com/ChanceHMiller","观察中","X优先","2026-09-01","活跃","2026-09-01","当日仍在密集分享 Apple 与 9to5Mac 报道","2026-09-01"],
+  ["ED-0025","Ben Lovejoy","9to5Mac","EU Editor","Apple；iPhone；Mac；智能家居；用户体验","https://x.com/benlovejoy","观察中","X优先","2026-09-01","活跃","2026-09-01","当日仍在持续分享 Apple 与消费电子报道","2026-09-01"],
+  ["ED-0026","Ben Schoon","9to5Google","Senior Editor","Android；Pixel；Samsung；折叠屏；Google TV","https://x.com/NexusBen","观察中","X优先","2026-08-26","活跃","2026-08-26","近期仍在发布 Android、Pixel 与智能设备内容","2026-09-01"],
+  ["ED-0027","Kyle Bradshaw","9to5Google","Writer, APK Insight","Android；Google；Gemini；Fuchsia；应用拆解","https://x.com/SkylledDev","观察中","重点","2026-08-29","活跃","2026-08-29","近期仍在发布 Google、Gemini 与代码拆解内容","2026-09-01"],
+  ["ED-0028","John Velasco","Tom's Guide","Senior Channel Editor for Phones","智能手机；相机；折叠屏；电动车；产品评测","https://x.com/John_C_Velasco","观察中","X优先","2026-08-31","活跃","2026-08-31","近期持续发布手机、影像和消费电子实测内容","2026-09-01"],
+  ["ED-0029","Patrick Holland","CNET","Managing Editor","智能手机；影像；Apple；Android；产品评测","https://x.com/trickholland","观察中","X优先","2026-08-27","活跃","2026-08-27","近期仍在发布 Apple 活动与 CNET 消费科技内容","2026-09-01"],
+  ["ED-0030","Mark Gurman","Bloomberg","Managing Editor, Consumer Technology","Apple；消费硬件；公司战略；产品路线图；人工智能","https://x.com/markgurman","观察中","X优先","2026-08-25","活跃","2026-09-01","当日仍在高频发布 Apple、消费硬件与公司战略信息","2026-09-01"],
+  ["ED-0031","Joanna Stern","New Things / NBC News","Founder；Chief Tech Analyst","消费科技；人工智能；产品体验；科技文化；视频","https://x.com/JoannaStern","观察中","X优先","2026-08-22","活跃","2026-08-28","近期仍在发布消费科技与 AI 产品体验内容；机构信息已按现职更新","2026-09-01"],
+] as const;
+
+export const existingEditorActivityUpdates = [
+  ["ED-0001","低活跃",null,"近17日未观察到公开发帖；保留联系人，退出 X 优先队列"],
+  ["ED-0002","活跃","2026-09-01","当日仍在发布和回复科技行业内容"],
+  ["ED-0003","无 X 账号",null,"数据库中暂无已核验的 X 账号"],
+  ["ED-0004","低活跃",null,"近17日未观察到公开发帖；保留联系人，退出 X 优先队列"],
+  ["ED-0005","低活跃",null,"近17日未观察到公开发帖；保留联系人，退出 X 优先队列"],
+  ["ED-0006","活跃","2026-08-21","近期仍在发布自动驾驶与出行科技内容"],
+  ["ED-0007","活跃","2026-09-01","已有当日 X 互动记录；联系人与关系阶段受保护"],
+  ["ED-0008","低活跃",null,"近17日未观察到公开发帖；保留联系人，退出 X 优先队列"],
+  ["ED-0009","活跃","2026-08-20","近期仍在发布消费电子内容"],
+  ["ED-0010","活跃","2026-09-01","当日仍在发布消费电子内容；已有互动记录受保护"],
+  ["ED-0011","低活跃",null,"近17日未观察到公开发帖；保留联系人，退出 X 优先队列"],
+  ["ED-0012","活跃","2026-09-01","当日仍在发布 IFA 与消费电子内容"],
+  ["ED-0013","无 X 账号",null,"数据库中暂无已核验的 X 账号"],
+  ["ED-0014","低活跃",null,"近17日未观察到公开发帖；保留联系人，退出 X 优先队列"],
+  ["ED-0015","无 X 账号",null,"数据库中暂无已核验的 X 账号"],
+  ["ED-0016","低活跃",null,"近17日未观察到公开发帖；保留联系人，退出 X 优先队列"],
+  ["ED-0017","无 X 账号",null,"数据库中暂无已核验的 X 账号"],
+  ["ED-0018","无 X 账号",null,"数据库中暂无已核验的 X 账号"],
+] as const;
+
 export const articleSeeds = [
   ["AR-000011","ED-0011","Pixel Watch 5 review: A fantastic watch that's missing features at launch","https://www.engadget.com/2241496/google-pixel-watch-5-review/","2026-08-21","关注端侧 Gemini、快充和操控，同时指出部分健康与训练功能发布时尚未上线。","可穿戴；健康科技；Google","Engadget"],
   ["AR-000010","ED-0010","The Google Pixel 11 Pro Fold is the best folding Pixel yet — but it doesn't beat Samsung's best","https://www.techradar.com/phones/google-pixel-phones/google-pixel-11-pro-fold-review","2026-08-20","评测屏幕、耐用性与体验改进，并指出其仍未超越三星旗舰折叠屏。","折叠屏；Android；Google","TechRadar"],

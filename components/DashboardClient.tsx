@@ -38,12 +38,13 @@ export default function DashboardClient({ initialState }: { initialState: AppSta
   const [showModelForm, setShowModelForm] = useState(false);
   const [analysisConnection, setAnalysisConnection] = useState<ModelConnection | null>(null);
   const [search, setSearch] = useState("");
+  const [xActivityFilter, setXActivityFilter] = useState("全部");
   const [busy, setBusy] = useState(false);
   const [refreshingArticles, setRefreshingArticles] = useState(false);
   const [notice, setNotice] = useState("");
   const autoRefreshStarted = useRef(false);
 
-  const xEditors = state.editors.filter((editor) => editor.priority === "X优先");
+  const xEditors = state.editors.filter((editor) => editor.priority === "X优先" && editor.x_activity_status === "活跃");
   const effectiveInteractions = state.interactions.filter((item) => ["公开回复", "转发并补充"].includes(item.interaction_type)).length;
   const responses = state.interactions.filter((item) => item.response_received).length;
   const completed = state.opportunities.filter((item) => item.status === "已回复").length;
@@ -98,8 +99,13 @@ export default function DashboardClient({ initialState }: { initialState: AppSta
 
   const filteredEditors = useMemo(() => {
     const keyword = search.trim().toLowerCase();
-    return state.editors.filter((editor) => !keyword || [editor.name, editor.media, editor.role, editor.topics].join(" ").toLowerCase().includes(keyword));
-  }, [search, state.editors]);
+    return state.editors.filter((editor) => {
+      const matchesSearch = !keyword || [editor.name, editor.media, editor.role, editor.topics].join(" ").toLowerCase().includes(keyword);
+      const matchesActivity = xActivityFilter === "全部" || editor.x_activity_status === xActivityFilter;
+      return matchesSearch && matchesActivity;
+    });
+  }, [search, state.editors, xActivityFilter]);
+  const mediaCount = new Set(state.editors.map((editor) => editor.media)).size;
 
   return (
     <main className="app-shell">
@@ -114,7 +120,7 @@ export default function DashboardClient({ initialState }: { initialState: AppSta
             </button>
           ))}
         </nav>
-        <div className="import-badge"><span>✓</span><div><strong>Excel 数据已导入</strong><small>{state.editors.length} 位编辑 · 13 家媒体</small></div></div>
+        <div className="import-badge"><span>✓</span><div><strong>本地数据库已就绪</strong><small>{state.editors.length} 位编辑 · {mediaCount} 家媒体</small></div></div>
         <div className="sidebar-foot"><div className="mode-dot" /><div><strong>演示模式</strong><small>可连接任意 LLM API</small></div></div>
       </aside>
 
@@ -125,7 +131,7 @@ export default function DashboardClient({ initialState }: { initialState: AppSta
           <TodayView state={state} xEditors={xEditors} effectiveInteractions={effectiveInteractions} responses={responses} completed={completed} onSelect={setSelectedOpportunity} />
         )}
         {tab === "editors" && (
-          <EditorsView editors={filteredEditors} search={search} setSearch={setSearch} busy={busy} onStage={(id, stage) => mutate({ type: "update_editor_stage", id, stage })} onLog={setInteractionEditor} />
+          <EditorsView editors={filteredEditors} allEditors={state.editors} search={search} setSearch={setSearch} xActivityFilter={xActivityFilter} setXActivityFilter={setXActivityFilter} busy={busy} onStage={(id, stage) => mutate({ type: "update_editor_stage", id, stage })} onLog={setInteractionEditor} />
         )}
         {tab === "articles" && <ArticlesView state={state} refreshing={refreshingArticles} onRefresh={() => refreshArticles(false)} />}
         {tab === "review" && <ReviewView state={state} effective={effectiveInteractions} responses={responses} />}
@@ -201,7 +207,11 @@ function Metric({ label, value, note }: { label: string; value: string | number;
 function TodayView({ state, xEditors, effectiveInteractions, responses, completed, onSelect }: {
   state: AppState; xEditors: Editor[]; effectiveInteractions: number; responses: number; completed: number; onSelect: (item: Opportunity) => void;
 }) {
-  const queue = state.opportunities.filter((item) => item.status !== "跳过").slice(0, 3);
+  const queue = state.opportunities.filter((item) => {
+    if (item.status === "跳过") return false;
+    const editor = state.editors.find((candidate) => candidate.id === item.editor_id);
+    return editor?.x_activity_status === "活跃" || Boolean(editor?.effective_interactions);
+  }).slice(0, 3);
   return <>
     <div className="metrics" aria-label="本周概览">
       <Metric label="X 优先编辑" value={xEditors.length} note="全部有公开职业账号" />
@@ -229,8 +239,10 @@ function ActionCard({ action, index, onSelect }: { action: Opportunity; index: n
   return <article className="action-card"><div className="action-number">0{index + 1}</div><div className="action-main"><div className="person-line"><span className={`priority ${action.priority === "紧急" ? "urgent" : ""}`}>{action.priority}</span><strong>{action.editor_name}</strong><span>{action.media}</span>{handle && <a href={action.x_url || "#"} target="_blank" rel="noreferrer">@{handle}</a>}</div><h3>{action.article_title}</h3><p>{action.suggested_angle}</p></div><div className="action-controls"><span>{dateLabel(action.due_date)}</span><button onClick={() => onSelect(action)}>{action.status === "已回复" ? "查看记录" : "查看建议"}</button></div></article>;
 }
 
-function EditorsView({ editors, search, setSearch, busy, onStage, onLog }: { editors: Editor[]; search: string; setSearch: (value: string) => void; busy: boolean; onStage: (id: string, stage: string) => void; onLog: (editor: Editor) => void }) {
-  return <section className="panel table-panel"><div className="toolbar"><div><span className="eyebrow">已导入数据库</span><h2>{editors.length} 位编辑</h2></div><input aria-label="搜索编辑" placeholder="搜索姓名、媒体或关注点" value={search} onChange={(event) => setSearch(event.target.value)} /></div><div className="editor-table"><div className="table-row table-head"><span>编辑</span><span>媒体与职位</span><span>关注领域</span><span>关系阶段</span><span>互动</span><span /></div>{editors.map((editor) => <div className="table-row" key={editor.id}><span className="editor-identity"><i>{initials(editor.name)}</i><span><strong>{editor.name}</strong>{editor.x_url ? <a href={editor.x_url} target="_blank" rel="noreferrer">@{editor.x_url.split("/").pop()}</a> : <small>暂无 X 账号</small>}</span></span><span><strong>{editor.media}</strong><small>{editor.role}</small></span><span className="topic-cell">{editor.topics}</span><span><select disabled={busy} value={editor.stage} onChange={(event) => onStage(editor.id, event.target.value)}>{stageOptions.map((stage) => <option key={stage}>{stage}</option>)}</select></span><span><strong>{editor.effective_interactions}</strong><small>{editor.responses} 次回应</small></span><span><button className="row-button" onClick={() => onLog(editor)}>记录互动</button></span></div>)}</div></section>;
+function EditorsView({ editors, allEditors, search, setSearch, xActivityFilter, setXActivityFilter, busy, onStage, onLog }: { editors: Editor[]; allEditors: Editor[]; search: string; setSearch: (value: string) => void; xActivityFilter: string; setXActivityFilter: (value: string) => void; busy: boolean; onStage: (id: string, stage: string) => void; onLog: (editor: Editor) => void }) {
+  const activeCount = allEditors.filter((editor) => editor.x_activity_status === "活跃").length;
+  const lowCount = allEditors.filter((editor) => editor.x_activity_status === "低活跃").length;
+  return <section className="panel table-panel"><div className="toolbar"><div><span className="eyebrow">关系数据库 · X 活跃 {activeCount} · 低活跃 {lowCount}</span><h2>{editors.length} 位编辑</h2></div><div className="editor-tools"><div className="activity-filters" aria-label="按 X 活跃度筛选">{["全部","活跃","低活跃","无 X 账号"].map((status) => <button className={xActivityFilter === status ? "active" : ""} key={status} onClick={() => setXActivityFilter(status)}>{status}</button>)}</div><input aria-label="搜索编辑" placeholder="搜索姓名、媒体或关注点" value={search} onChange={(event) => setSearch(event.target.value)} /></div></div><div className="editor-table"><div className="table-row table-head"><span>编辑</span><span>媒体与职位</span><span>关注领域</span><span>关系阶段</span><span>互动</span><span /></div>{editors.map((editor) => <div className="table-row" key={editor.id}><span className="editor-identity"><i>{initials(editor.name)}</i><span><strong>{editor.name}</strong>{editor.x_url ? <><a href={editor.x_url} target="_blank" rel="noreferrer">@{editor.x_url.split("/").pop()}</a><small className={`activity-status ${editor.x_activity_status === "活跃" ? "active" : editor.x_activity_status === "低活跃" ? "low" : ""}`} title={editor.x_activity_note || ""}>{editor.x_activity_status}{editor.x_last_observed_at ? ` · ${dateLabel(editor.x_last_observed_at)}` : ""}</small></> : <small className="activity-status">无 X 账号</small>}</span></span><span><strong>{editor.media}</strong><small>{editor.role}</small></span><span className="topic-cell">{editor.topics}</span><span><select disabled={busy} value={editor.stage} onChange={(event) => onStage(editor.id, event.target.value)}>{stageOptions.map((stage) => <option key={stage}>{stage}</option>)}</select></span><span><strong>{editor.effective_interactions}</strong><small>{editor.responses} 次回应</small></span><span><button className="row-button" onClick={() => onLog(editor)}>记录互动</button></span></div>)}</div></section>;
 }
 
 function ArticlesView({ state, refreshing, onRefresh }: { state: AppState; refreshing: boolean; onRefresh: () => void }) {

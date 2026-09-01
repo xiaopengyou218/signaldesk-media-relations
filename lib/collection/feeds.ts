@@ -30,6 +30,9 @@ export const feedSources: FeedSource[] = [
   { media: "PetaPixel", url: "https://petapixel.com/feed/" },
   { media: "T3", url: "https://www.t3.com/feeds.xml" },
   { media: "ZDNET", url: "https://www.zdnet.com/news/rss.xml" },
+  { media: "9to5Mac", url: "https://9to5mac.com/feed/" },
+  { media: "9to5Google", url: "https://9to5google.com/feed/" },
+  { media: "CNET", url: "https://www.cnet.com/rss/news/" },
 ];
 
 function decodeXml(value: string) {

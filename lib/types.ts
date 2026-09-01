@@ -8,6 +8,10 @@ export type Editor = {
   stage: string;
   priority: string;
   last_article_date: string | null;
+  x_activity_status: string;
+  x_last_observed_at: string | null;
+  x_activity_note: string | null;
+  x_verified_at: string | null;
   effective_interactions: number;
   responses: number;
 };

@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { schemaStatements } from "./schema";
-import { articleSeeds, editorSeeds, opportunitySeeds } from "./seed";
+import { articleSeeds, editorExpansionSeeds, editorSeeds, existingEditorActivityUpdates, opportunitySeeds } from "./seed";
 import type { AppState, Article, ArticleAnalysis, ArticleRefresh, Editor, Interaction, ModelConnection, Opportunity } from "@/lib/types";
 import type { CollectedArticle } from "@/lib/collection/feeds";
 
@@ -22,9 +22,25 @@ function getDatabase(): Database {
   return database;
 }
 
+async function ensureEditorActivityColumns(db: Database) {
+  const columns = await db.prepare("PRAGMA table_info(editors)").all<{ name: string }>();
+  const existing = new Set(columns.results.map((column) => column.name));
+  const additions = [
+    ["x_activity_status", "ALTER TABLE editors ADD COLUMN x_activity_status TEXT NOT NULL DEFAULT '待核验'"],
+    ["x_last_observed_at", "ALTER TABLE editors ADD COLUMN x_last_observed_at TEXT"],
+    ["x_activity_note", "ALTER TABLE editors ADD COLUMN x_activity_note TEXT"],
+    ["x_verified_at", "ALTER TABLE editors ADD COLUMN x_verified_at TEXT"],
+  ] as const;
+  for (const [name, sql] of additions) {
+    if (!existing.has(name)) await db.prepare(sql).run();
+  }
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_editors_x_activity_priority ON editors(x_activity_status,priority)").run();
+}
+
 export async function ensureDatabase() {
   const db = getDatabase();
   await db.batch(schemaStatements.map((sql) => db.prepare(sql)));
+  await ensureEditorActivityColumns(db);
   const count = await db.prepare("SELECT COUNT(*) AS total FROM editors").first<{ total: number }>();
   if ((count?.total ?? 0) === 0) {
     await db.batch(editorSeeds.map((row) => db.prepare(
@@ -40,6 +56,18 @@ export async function ensureDatabase() {
       "INSERT INTO model_connections (id,label,provider,model,status,is_default) VALUES (?,?,?,?,?,?)",
     ).bind("demo", "内置演示模式", "demo", "规则引擎", "可用", 1).run();
   }
+  await db.batch(editorExpansionSeeds.map((row) => db.prepare(`INSERT OR IGNORE INTO editors
+    (id,name,media,role,topics,x_url,stage,priority,last_article_date,x_activity_status,x_last_observed_at,x_activity_note,x_verified_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(...row)));
+  await db.batch(existingEditorActivityUpdates.map(([id, status, observedAt, note]) => db.prepare(`UPDATE editors SET
+    x_activity_status=?, x_last_observed_at=?, x_activity_note=?, x_verified_at='2026-09-01',
+    updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(status, observedAt, note, id)));
+  const lowActivityIds = existingEditorActivityUpdates
+    .filter(([, status]) => status === "低活跃")
+    .map(([id]) => id);
+  await db.batch(lowActivityIds.map((id) => db.prepare(`UPDATE editors SET priority='常规', updated_at=CURRENT_TIMESTAMP
+    WHERE id=? AND stage='观察中'
+    AND NOT EXISTS (SELECT 1 FROM interactions i WHERE i.editor_id=editors.id)`).bind(id)));
   await db.prepare(`INSERT OR IGNORE INTO model_connections
     (id,label,provider,model,base_url,status,is_default)
     VALUES (?,?,?,?,?,?,?)`).bind(
