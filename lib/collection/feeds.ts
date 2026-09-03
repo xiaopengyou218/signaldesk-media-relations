@@ -33,6 +33,8 @@ export const feedSources: FeedSource[] = [
   { media: "9to5Mac", url: "https://9to5mac.com/feed/" },
   { media: "9to5Google", url: "https://9to5google.com/feed/" },
   { media: "CNET", url: "https://www.cnet.com/rss/news/" },
+  { media: "Android Central", url: "https://www.androidcentral.com/feeds.xml" },
+  { media: "Ars Technica", url: "https://feeds.arstechnica.com/arstechnica/index" },
 ];
 
 function decodeXml(value: string) {

@@ -33,6 +33,21 @@ export const editorExpansionSeeds = [
   ["ED-0029","Patrick Holland","CNET","Managing Editor","智能手机；影像；Apple；Android；产品评测","https://x.com/trickholland","观察中","X优先","2026-08-27","活跃","2026-08-27","近期仍在发布 Apple 活动与 CNET 消费科技内容","2026-09-01"],
   ["ED-0030","Mark Gurman","Bloomberg","Managing Editor, Consumer Technology","Apple；消费硬件；公司战略；产品路线图；人工智能","https://x.com/markgurman","观察中","X优先","2026-08-25","活跃","2026-09-01","当日仍在高频发布 Apple、消费硬件与公司战略信息","2026-09-01"],
   ["ED-0031","Joanna Stern","New Things / NBC News","Founder；Chief Tech Analyst","消费科技；人工智能；产品体验；科技文化；视频","https://x.com/JoannaStern","观察中","X优先","2026-08-22","活跃","2026-08-28","近期仍在发布消费科技与 AI 产品体验内容；机构信息已按现职更新","2026-09-01"],
+  ["ED-0032","Victoria Song","The Verge","Senior Reviewer, Wearable Tech","可穿戴；健康科技；健身；XR；智能眼镜","https://x.com/vicmsong","观察中","X优先","2026-09-02","活跃","2026-08-06","近30日仍在分享智能眼镜、健康科技与可穿戴深度报道","2026-09-03"],
+  ["ED-0033","Kate Kozuch","Tom's Guide","Managing Editor, Social and Video","电视；音频；可穿戴；智能家居；社交视频","https://x.com/katedylankozuch","观察中","重点","2026-09-01","待核验",null,"账号已核验；近期发言频率待下一轮观察，不进入每日 X 优先队列","2026-09-03"],
+  ["ED-0034","Philip Berne","TechRadar","Senior Editor, Mobile Reviews & Buying Guides","智能手机；移动AI；购买指南；可折叠设备；电动车","https://x.com/philipberne","观察中","重点","2026-08-21","待核验",null,"账号已核验；近期发言频率待下一轮观察，不进入每日 X 优先队列","2026-09-03"],
+  ["ED-0035","Mat Smith","Engadget","UK Bureau Chief","智能手机；主机游戏；健身科技；机器人；日本科技","https://x.com/thatmatsmith","观察中","重点","2026-08-26","待核验",null,"账号已核验；近期发言频率待下一轮观察，不进入每日 X 优先队列","2026-09-03"],
+  ["ED-0036","Devindra Hardawar","Engadget","Senior Editor","笔记本电脑；PC硬件；游戏；家庭影音；人工智能","https://x.com/devindra","观察中","重点","2026-08-21","待核验",null,"账号已核验；近期发言频率待下一轮观察，不进入每日 X 优先队列","2026-09-03"],
+  ["ED-0037","Rita El Khoury","Android Authority","Senior Features Editor","Android；Pixel；应用；智能家居；可穿戴","https://x.com/khouryrt","观察中","重点","2026-07-05","待核验",null,"账号已核验；近期发言频率待下一轮观察，不进入每日 X 优先队列","2026-09-03"],
+  ["ED-0038","Hadlee Simons","Android Authority","Technology Journalist","移动芯片；手机影像；小众品牌；Android；掌机","https://x.com/HadleeSimons","观察中","重点","2026-09-03","待核验",null,"账号已核验；近期发言频率待下一轮观察，不进入每日 X 优先队列","2026-09-03"],
+  ["ED-0039","Aamir Siddiqui","Android Authority","Senior Writer, News","Android；APK拆解；平台功能；科技商业；科技监管","https://x.com/aamirsiddiqui","观察中","重点","2026-09-03","待核验",null,"账号已核验；近期发言频率待下一轮观察，不进入每日 X 优先队列","2026-09-03"],
+  ["ED-0040","Robert Triggs","Android Authority","Head of Testing and Data Science","移动芯片；基准测试；手机影像；5G；音频技术",null,"观察中","重点","2026-08-28","无 X 账号",null,"未找到可可靠核验且适合互动的个人 X 账号","2026-09-03"],
+  ["ED-0041","Nicholas Sutrich","Android Central","Senior Content Producer, Smartphones & XR","智能手机；折叠屏；VR；智能眼镜；显示技术","https://x.com/Gwanatu","观察中","X优先","2026-09-02","活跃","2026-09-02","近24小时持续发布和回复，内容集中于 XR、显示与折叠设备","2026-09-03"],
+  ["ED-0042","Harish Jonnalagadda","Android Central","Senior Editor, Mobile","中国手机品牌；Android；音频；网络设备；NAS","https://x.com/chunkynerd","观察中","重点","2026-09-03","待核验",null,"账号已核验；近期发言频率待下一轮观察，不进入每日 X 优先队列","2026-09-03"],
+  ["ED-0043","Namerah Saud Fatmi","Android Central","Senior Editor, Accessories","手机配件；移动设备；可穿戴；智能家居；消费硬件","https://x.com/NamerahS","观察中","常规","2026-08-31","低活跃","2026-06-03","约三个月前有公开发言；保留联系人但不进入 X 优先队列","2026-09-03"],
+  ["ED-0044","Stan Schroeder","Mashable","Senior Editor","新兴科技；移动设备；电动车；音视频；Web技术","https://x.com/franticnews","观察中","重点","2026-08-31","待核验",null,"账号及公开联系偏好已核验；近期发言频率待下一轮观察","2026-09-03"],
+  ["ED-0045","Andrew Cunningham","Ars Technica","Senior Technology Reporter","消费科技；Windows；macOS；处理器；显卡",null,"观察中","常规","2026-08-24","无 X 账号",null,"官方作者页仅列 Mastodon 与 Bluesky，保留作文章监测联系人","2026-09-03"],
+  ["ED-0046","Kyle Orland","Ars Technica","Senior Gaming Editor","游戏硬件；游戏产业；生成式AI；VR；数字保存",null,"观察中","常规","2026-08-31","无 X 账号",null,"官方作者页当前仅推荐 Bluesky，保留作文章监测联系人","2026-09-03"],
 ] as const;
 
 export const existingEditorActivityUpdates = [
