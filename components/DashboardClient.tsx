@@ -77,7 +77,8 @@ export default function DashboardClient({ initialState }: { initialState: AppSta
       if (!response.ok) throw new Error(result.error || "文章刷新失败");
       setState(result);
       const inserted = result.articleRefresh?.insertedCount || 0;
-      setNotice(inserted ? `文章已更新：新增 ${inserted} 篇` : "文章已是最新");
+      const analysisStatus = result.articleRefresh?.aiStatus || "模型未运行";
+      setNotice(inserted ? `新增 ${inserted} 篇 · ${analysisStatus}` : `文章已是最新 · ${analysisStatus}`);
       window.setTimeout(() => setNotice(""), 2600);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "文章刷新失败");
@@ -249,9 +250,9 @@ function ArticlesView({ state, refreshing, onRefresh }: { state: AppState; refre
   const refresh = state.articleRefresh;
   const liveArticles = state.articles.filter((article) => article.id.startsWith("AR-LIVE-"));
   const visibleArticles = liveArticles.length ? liveArticles : state.articles;
-  return <div className="article-layout"><section className="panel article-feed"><div className="panel-heading"><div><span className="eyebrow">最近更新</span><h2>{visibleArticles.length} 篇重点文章</h2>{refresh && <small className="refresh-meta">{dateTimeLabel(refresh.completedAt)} · {refresh.aiStatus}</small>}</div><div className="refresh-actions"><span className="source-pill">公开 RSS + MiniMax</span><button className="secondary-button" disabled={refreshing} onClick={onRefresh}>{refreshing ? "刷新中…" : "刷新文章"}</button></div></div>{visibleArticles.slice(0, 50).map((article) => {
+  return <div className="article-layout"><section className="panel article-feed"><div className="panel-heading"><div><span className="eyebrow">最近更新</span><h2>{visibleArticles.length} 篇重点文章</h2>{refresh && <small className="refresh-meta">{dateTimeLabel(refresh.completedAt)} · {refresh.aiStatus}</small>}</div><div className="refresh-actions"><span className="source-pill">公开 RSS + 自动模型分析</span><button className="secondary-button" disabled={refreshing} onClick={onRefresh}>{refreshing ? "刷新并分析中…" : "刷新并分析"}</button></div></div>{visibleArticles.slice(0, 50).map((article) => {
     const analysis = state.analyses.find((item) => item.article_id === article.id);
-    return <article className="article-item" key={article.id}><div className="article-date">{dateLabel(article.published_at)}</div><div><div className="person-line"><strong>{article.editor_name}</strong><span>{article.media}</span></div><a className="article-title" href={article.url} target="_blank" rel="noreferrer">{article.title}</a><p>{article.summary}</p><div className="tag-row">{article.topics.split("；").map((tag) => <span key={tag}>{tag}</span>)}</div>{analysis && <div className="analysis-card"><div><span>AI 实跑结果</span><em>{analysis.connection_label} · {analysis.model}</em></div><dl><dt>编辑关注点</dt><dd>{analysis.focus}</dd><dt>相关性判断</dt><dd>{analysis.relevance}</dd><dt>X 互动建议</dt><dd>{analysis.x_angle}</dd><dt>避免</dt><dd>{analysis.avoid}</dd></dl></div>}</div></article>;
+    return <article className="article-item" key={article.id}><div className="article-date">{dateLabel(article.published_at)}</div><div><div className="person-line"><strong>{article.editor_name}</strong><span>{article.media}</span></div><a className="article-title" href={article.url} target="_blank" rel="noreferrer">{article.title}</a><p>{article.summary}</p><div className="tag-row">{article.topics.split("；").map((tag) => <span key={tag}>{tag}</span>)}</div>{analysis && <div className="analysis-card"><div><span>AI 分析结果</span><em>{analysis.connection_label} · {analysis.model}</em></div><dl><dt>编辑关注点</dt><dd>{analysis.focus}</dd><dt>相关性判断</dt><dd>{analysis.relevance}</dd><dt>X 互动建议</dt><dd>{analysis.x_angle}</dd><dt>避免</dt><dd>{analysis.avoid}</dd></dl></div>}</div></article>;
   })}</section><aside className="panel method-card"><span className="eyebrow">低成本流程</span><h2>只把必要内容交给模型</h2><ol><li><strong>采集</strong><span>RSS 和作者页</span></li><li><strong>去重</strong><span>URL 与正文指纹</span></li><li><strong>初筛</strong><span>关键词和规则</span></li><li><strong>分析</strong><span>仅处理高相关内容</span></li></ol></aside></div>;
 }
 
@@ -262,7 +263,7 @@ function ReviewView({ state, effective, responses }: { state: AppState; effectiv
 
 function ModelsView({ state, onAdd, onRun }: { state: AppState; onAdd: () => void; onRun: (connection: ModelConnection) => void }) {
   const providers = [["OpenAI", "原生 Responses API"], ["Anthropic", "原生 Messages API"], ["Gemini", "原生 GenerateContent API"], ["MiniMax", "中国区与国际区预设"], ["兼容端点", "其他 OpenAI-compatible / 私有网关"]];
-  return <div className="models-grid"><section className="panel model-connections"><div className="panel-heading"><div><span className="eyebrow">模型连接</span><h2>供应商可以随时切换</h2></div><button className="primary-button" onClick={onAdd}>添加连接</button></div>{state.modelConnections.map((connection) => <div className="connection-row" key={connection.id}><span className={`provider-logo ${connection.provider}`}>{connection.provider === "demo" ? "D" : connection.provider[0].toUpperCase()}</span><div><strong>{connection.label}</strong><small>{connection.model}{connection.base_url ? ` · ${connection.base_url}` : ""}</small></div><span className="status-dot">{connection.status}</span>{connection.provider === "minimax" || connection.provider === "compatible" ? <button className="run-button" onClick={() => onRun(connection)}>试跑真实文章</button> : connection.is_default ? <em>默认</em> : <em>备用</em>}</div>)}</section><section className="panel router-card"><span className="eyebrow">统一任务接口</span><h2>业务逻辑不绑定模型</h2><div className="router-flow"><span>文章分类</span><span>相关性评分</span><span>互动建议</span><span>周报生成</span></div><p>系统统一处理任务、结构化输出、重试与费用记录；每个供应商只负责把统一任务翻译成自己的 API 格式。</p></section><section className="panel provider-matrix"><div className="panel-heading"><div><span className="eyebrow">当前支持</span><h2>五类连接方式</h2></div></div>{providers.map(([name, note]) => <div className="matrix-row" key={name}><strong>{name}</strong><span>{note}</span><em>可连接</em></div>)}</section></div>;
+  return <div className="models-grid"><section className="panel model-connections"><div className="panel-heading"><div><span className="eyebrow">模型连接</span><h2>供应商可以随时切换</h2></div><button className="primary-button" onClick={onAdd}>添加连接</button></div>{state.modelConnections.map((connection) => <div className="connection-row" key={connection.id}><span className={`provider-logo ${connection.provider}`}>{connection.provider === "demo" ? "D" : connection.provider[0].toUpperCase()}</span><div><strong>{connection.label}</strong><small>{connection.model}{connection.base_url ? ` · ${connection.base_url}` : ""}</small></div><span className="status-dot">{connection.status}</span>{connection.provider === "minimax" || connection.provider === "compatible" ? <button className="run-button" onClick={() => onRun(connection)}>手动补分析</button> : connection.is_default ? <em>默认</em> : <em>备用</em>}</div>)}</section><section className="panel router-card"><span className="eyebrow">统一任务接口</span><h2>业务逻辑不绑定模型</h2><div className="router-flow"><span>文章分类</span><span>相关性评分</span><span>互动建议</span><span>周报生成</span></div><p>系统统一处理任务、结构化输出、重试与费用记录；每个供应商只负责把统一任务翻译成自己的 API 格式。</p></section><section className="panel provider-matrix"><div className="panel-heading"><div><span className="eyebrow">当前支持</span><h2>五类连接方式</h2></div></div>{providers.map(([name, note]) => <div className="matrix-row" key={name}><strong>{name}</strong><span>{note}</span><em>可连接</em></div>)}</section></div>;
 }
 
 function OpportunityDrawer({ opportunity, busy, onClose, onUpdate, onLog }: { opportunity: Opportunity; busy: boolean; onClose: () => void; onUpdate: (status: string, xPostStatus: string, xPostUrl?: string) => void; onLog: () => void }) {
@@ -343,15 +344,15 @@ function AnalysisRunModal({ connection, articles, busy, onClose, onRun }: {
   return <dialog open className="overlay center" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <form className="modal analysis-modal" onSubmit={(event) => { event.preventDefault(); onRun(articleId, apiKey); }}>
       <button type="button" className="close-button" onClick={onClose} aria-label="关闭">×</button>
-      <span className="eyebrow">真实 API · 单篇试跑</span>
-      <h2>用 {connection.label} 分析文章</h2>
+      <span className="eyebrow">真实 API · 手动补分析</span>
+      <h2>用 {connection.label} 补充分析</h2>
       <p className="analysis-intro">本次会把所选文章的标题、摘要、标签及编辑资料发给 {connection.model}，生成关注点、相关性和一条 X 互动建议。</p>
       <div className="form-grid single">
         <label>选择文章<select value={articleId} onChange={(event) => setArticleId(event.target.value)}>{articles.map((article) => <option key={article.id} value={article.id}>{article.editor_name} · {article.title}</option>)}</select></label>
         <label>API Key<input type="password" autoComplete="off" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={`本地钥匙串已配置可留空；否则输入 ${connection.key_hint || "API Key"}`} /></label>
       </div>
       <p className="privacy-note">本地版会从 macOS 钥匙串读取密钥；手动输入的密钥也只用于本次请求，不写入数据库。分析结果会保存到对应文章下方。</p>
-      <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>取消</button><button disabled={busy || !articleId} className="primary-button">{busy ? "分析中…" : "开始真实分析"}</button></div>
+      <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>取消</button><button disabled={busy || !articleId} className="primary-button">{busy ? "分析中…" : "开始补充分析"}</button></div>
     </form>
   </dialog>;
 }

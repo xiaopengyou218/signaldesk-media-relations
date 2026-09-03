@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
 import { env } from "cloudflare:workers";
-import { getAppState, getCollectionContext, saveCollectedArticles, saveSourceSyncRun } from "@/db";
+import { getAppState, getArticleIdsByUrls, getCollectionContext, saveArticleAnalyses, saveCollectedArticles, saveSourceSyncRun } from "@/db";
 import { collectTrackedArticles, fallbackArticleMetadata } from "@/lib/collection/feeds";
-import { enrichCollectedArticlesWithProvider } from "@/lib/llm/providers";
+import { enrichCollectedArticlesWithProvider, type CollectionEnrichment } from "@/lib/llm/providers";
 
 export const dynamic = "force-dynamic";
 
 export async function POST() {
   const startedAt = new Date().toISOString();
   try {
-    const { editors, knownUrls, connection, lastAiStatus } = await getCollectionContext();
+    const { editors, knownUrls, analyzedUrls, connection } = await getCollectionContext();
     const collected = await collectTrackedArticles(editors);
     const perEditor = new Map<string, number>();
     const recent = collected.articles.filter((article) => {
@@ -19,17 +19,18 @@ export async function POST() {
       return true;
     }).slice(0, 30);
     const fresh = recent.filter((article) => !knownUrls.has(article.url));
-    const shouldRetryAi = !fresh.length && (lastAiStatus.includes("失败") || lastAiStatus.includes("未运行"));
-    const aiCandidates = fresh.length ? fresh.slice(0, 8) : shouldRetryAi ? recent.slice(0, 8) : [];
+    const analysisBacklog = recent.filter((article) => !analyzedUrls.has(article.url));
+    const aiCandidates = (fresh.length ? fresh : analysisBacklog).slice(0, 5);
 
     const fallback = new Map(fresh.map((article) => [article.url, fallbackArticleMetadata(article)]));
     const apiKey = (env as unknown as { MINIMAX_API_KEY?: string }).MINIMAX_API_KEY?.trim();
-    let aiStatus = aiCandidates.length ? "未运行：MiniMax 密钥未配置" : "无新增，无需调用";
+    let aiStatus = aiCandidates.length ? "未运行：MiniMax 密钥未配置" : "无新增且均已分析";
     let aiError = "";
+    let aiItems: CollectionEnrichment[] = [];
 
     if (aiCandidates.length && apiKey && connection) {
       try {
-        const aiItems = await enrichCollectedArticlesWithProvider({
+        aiItems = await enrichCollectedArticlesWithProvider({
           provider: "minimax",
           apiKey,
           model: connection.model,
@@ -37,7 +38,8 @@ export async function POST() {
           articles: aiCandidates,
         });
         for (const item of aiItems) fallback.set(item.url, { summary: item.summary, topics: item.topics });
-        aiStatus = `MiniMax 已整理 ${aiItems.length} 篇`;
+        const analysisCount = aiItems.filter((item) => item.focus && item.relevance && item.xAngle && item.avoid).length;
+        aiStatus = `MiniMax 已整理并分析 ${analysisCount} 篇`;
       } catch (error) {
         aiError = error instanceof Error ? `MiniMax: ${error.message}` : "MiniMax: 整理失败";
         aiStatus = "MiniMax 失败，已用本地规则完成";
@@ -45,13 +47,28 @@ export async function POST() {
     }
 
     const saveCandidates = new Map(fresh.map((article) => [article.url, article]));
-    if (aiStatus.startsWith("MiniMax 已整理")) {
+    if (aiStatus.startsWith("MiniMax 已整理并分析")) {
       for (const article of aiCandidates) saveCandidates.set(article.url, article);
     }
     await saveCollectedArticles([...saveCandidates.values()].map((article) => ({
       ...article,
       ...(fallback.get(article.url) || fallbackArticleMetadata(article)),
     })));
+    if (connection && aiItems.length) {
+      const articleIds = await getArticleIdsByUrls(aiItems.map((item) => item.url));
+      await saveArticleAnalyses(aiItems.flatMap((item) => {
+        const articleId = articleIds.get(item.url);
+        if (!articleId || !item.focus || !item.relevance || !item.xAngle || !item.avoid) return [];
+        return [{
+          articleId,
+          connectionId: connection.id,
+          focus: item.focus,
+          relevance: item.relevance,
+          xAngle: item.xAngle,
+          avoid: item.avoid,
+        }];
+      }));
+    }
     const errors = [...collected.errors, ...(aiError ? [aiError] : [])];
     const status = collected.sourceCount === 0 ? "失败" : errors.length ? "部分完成" : "完成";
     await saveSourceSyncRun({

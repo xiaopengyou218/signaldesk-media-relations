@@ -121,15 +121,20 @@ export async function getAppState(): Promise<AppState> {
 export async function getCollectionContext() {
   await ensureDatabase();
   const db = getDatabase();
-  const [editors, urls, connection, lastRefresh] = await Promise.all([
+  const [editors, urls, analyzedUrls, connection] = await Promise.all([
     db.prepare("SELECT id,name,media FROM editors").all<{ id: string; name: string; media: string }>(),
     db.prepare("SELECT url FROM articles").all<{ url: string }>(),
+    db.prepare(`SELECT DISTINCT a.url FROM articles a
+      JOIN article_analyses aa ON aa.article_id=a.id`).all<{ url: string }>(),
     db.prepare(`SELECT * FROM model_connections WHERE provider='minimax'
       ORDER BY CASE WHEN id='minimax-local-preset' THEN 0 ELSE 1 END, updated_at DESC LIMIT 1`).first<ModelConnection>(),
-    db.prepare(`SELECT ai_status AS aiStatus FROM source_sync_runs
-      ORDER BY completed_at DESC LIMIT 1`).first<{ aiStatus: string }>(),
   ]);
-  return { editors: editors.results, knownUrls: new Set(urls.results.map((item) => item.url)), connection, lastAiStatus: lastRefresh?.aiStatus || "" };
+  return {
+    editors: editors.results,
+    knownUrls: new Set(urls.results.map((item) => item.url)),
+    analyzedUrls: new Set(analyzedUrls.results.map((item) => item.url)),
+    connection,
+  };
 }
 
 export async function saveCollectedArticles(input: Array<CollectedArticle & { summary: string; topics: string }>) {
@@ -152,6 +157,15 @@ export async function saveCollectedArticles(input: Array<CollectedArticle & { su
   await db.batch([...latestByEditor].map(([editorId, publishedAt]) => db.prepare(`UPDATE editors
     SET last_article_date=CASE WHEN last_article_date IS NULL OR last_article_date < ? THEN ? ELSE last_article_date END,
     updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(publishedAt, publishedAt, editorId)));
+}
+
+export async function getArticleIdsByUrls(urls: string[]) {
+  await ensureDatabase();
+  const db = getDatabase();
+  const rows = await Promise.all(urls.map((url) => db.prepare(
+    "SELECT id,url FROM articles WHERE url=?",
+  ).bind(url).first<{ id: string; url: string }>()));
+  return new Map(rows.flatMap((row) => row ? [[row.url, row.id] as const] : []));
 }
 
 export async function saveSourceSyncRun(input: {
@@ -251,11 +265,24 @@ export async function saveArticleAnalysis(input: {
   xAngle: string;
   avoid: string;
 }) {
+  await saveArticleAnalyses([input]);
+}
+
+export async function saveArticleAnalyses(input: Array<{
+  articleId: string;
+  connectionId: string;
+  focus: string;
+  relevance: string;
+  xAngle: string;
+  avoid: string;
+}>) {
+  if (!input.length) return;
   await ensureDatabase();
-  await getDatabase().prepare(`INSERT INTO article_analyses
+  const db = getDatabase();
+  await db.batch(input.map((analysis) => db.prepare(`INSERT INTO article_analyses
     (id,article_id,connection_id,focus,relevance,x_angle,avoid)
     VALUES (?,?,?,?,?,?,?)`).bind(
-      crypto.randomUUID(), input.articleId, input.connectionId, input.focus,
-      input.relevance, input.xAngle, input.avoid,
-    ).run();
+      crypto.randomUUID(), analysis.articleId, analysis.connectionId, analysis.focus,
+      analysis.relevance, analysis.xAngle, analysis.avoid,
+    )));
 }

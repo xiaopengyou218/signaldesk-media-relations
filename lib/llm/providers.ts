@@ -60,9 +60,9 @@ function cleanUpstreamError(text: string) {
   }
 }
 
-async function checkedFetch(url: string, init: RequestInit, notFoundHint?: string) {
+async function checkedFetch(url: string, init: RequestInit, notFoundHint?: string, timeoutMs = 15_000) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, { ...init, signal: controller.signal });
     if (!response.ok) {
@@ -151,6 +151,10 @@ export type CollectionEnrichment = {
   url: string;
   summary: string;
   topics: string;
+  focus?: string;
+  relevance?: string;
+  xAngle?: string;
+  avoid?: string;
 };
 
 function parseAnalysis(content: string): ArticleAnalysisOutput {
@@ -226,12 +230,16 @@ export async function enrichCollectedArticlesWithProvider(input: CollectionEnric
 
 为每篇文章生成：
 1. summary：一条简洁中文摘要，45-90个汉字；
-2. topics：2-4个中文主题，用中文分号“；”连接。
+2. topics：2-4个中文主题，用中文分号“；”连接；
+3. focus：用1-2句概括文章反映出的编辑关注点；
+4. relevance：用1-2句说明是否值得在 X 互动，以及原因；
+5. xAngle：一条自然、具体、不奉承的中文 X 回复建议，不超过120个汉字；
+6. avoid：一句话说明互动时应避免什么。
 
 输入：${JSON.stringify(records)}
 
 只返回 JSON，不要 Markdown，不要思考过程：
-{"items":[{"index":0,"summary":"…","topics":"…；…"}]}`;
+{"items":[{"index":0,"summary":"…","topics":"…；…","focus":"…","relevance":"…","xAngle":"…","avoid":"…"}]}`;
   const response = await checkedFetch(endpoint, {
     method: "POST",
     headers: { Authorization: `Bearer ${input.apiKey}`, "Content-Type": "application/json" },
@@ -242,9 +250,9 @@ export async function enrichCollectedArticlesWithProvider(input: CollectionEnric
         { role: "user", content: prompt },
       ],
       temperature: 0.1,
-      max_tokens: 1200,
+      max_tokens: 3200,
     }),
-  }, "请确认 MiniMax 模型 ID 与 Base URL");
+  }, "请确认 MiniMax 模型 ID 与 Base URL", 60_000);
   const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
   const content = payload.choices?.[0]?.message?.content
     ?.replace(/<think>[\s\S]*?<\/think>/gi, "")
@@ -252,10 +260,18 @@ export async function enrichCollectedArticlesWithProvider(input: CollectionEnric
     .trim();
   const json = content?.match(/\{[\s\S]*\}/)?.[0];
   if (!json) throw new Error("MiniMax 没有返回可读取的采集结果");
-  const parsed = JSON.parse(json) as { items?: Array<{ index?: number; summary?: string; topics?: string }> };
+  const parsed = JSON.parse(json) as { items?: Array<{ index?: number; summary?: string; topics?: string; focus?: string; relevance?: string; xAngle?: string; avoid?: string }> };
   return (parsed.items || []).flatMap((item) => {
     const article = typeof item.index === "number" ? input.articles[item.index] : undefined;
     if (!article || !item.summary || !item.topics) return [];
-    return [{ url: article.url, summary: item.summary.trim(), topics: item.topics.trim() }];
+    return [{
+      url: article.url,
+      summary: item.summary.trim(),
+      topics: item.topics.trim(),
+      focus: item.focus?.trim(),
+      relevance: item.relevance?.trim(),
+      xAngle: item.xAngle?.trim(),
+      avoid: item.avoid?.trim(),
+    }];
   });
 }
